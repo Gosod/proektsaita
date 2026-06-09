@@ -21,6 +21,7 @@ import logging
 import hashlib
 import secrets
 import hmac
+import calendar
 
 import gspread
 import pytz
@@ -329,11 +330,16 @@ def build_user_stats(user_id: int, all_reports: list, all_users: dict = None) ->
     for r in user_reports:
         proj = r.get('project', '?')
         by_project[proj] = round(by_project.get(proj, 0) + r.get('hours', 0), 2)
+    months_with_reports = sorted(
+        {r.get('date', '')[:7] for r in user_reports if len(r.get('date', '')) >= 7},
+        reverse=True,
+    )
     return {
-        'total_hours':   round(sum(r.get('hours', 0) for r in user_reports), 2),
-        'total_reports': len(user_reports),
-        'by_project':    by_project,
-        'month_hours':   month_hours,
+        'total_hours':         round(sum(r.get('hours', 0) for r in user_reports), 2),
+        'total_reports':       len(user_reports),
+        'by_project':          by_project,
+        'month_hours':         month_hours,
+        'months_with_reports': months_with_reports,
     }
 
 
@@ -816,6 +822,58 @@ def submit_report_pwa():
 
 
 # ── GET REPORTS ────────────────────────────────────────
+@app.route('/api/user/timesheet', methods=['GET'])
+@auth_required
+def user_timesheet():
+    """Данные табеля для сотрудника за указанный месяц."""
+    uid = request.current_user['uid']
+    try:
+        year  = int(request.args.get('year',  0))
+        month = int(request.args.get('month', 0))
+        if not year or not (1 <= month <= 12):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'year и month обязательны'}), 400
+
+    all_users   = load_json(USERS_FILE, {})
+    all_reports = sheets_read_all()
+    all_reports = _normalize_sheets_records(all_reports, all_users)
+
+    urec  = all_users.get(uid, {})
+    uname = urec.get('username', '').lower()
+    prefix = f'{year:04d}-{month:02d}'
+
+    user_reports = [
+        r for r in all_reports
+        if (r.get('user_id') == int(uid) or (uname and r.get('username', '').lower() == uname))
+        and r.get('date', '').startswith(prefix)
+    ]
+
+    days_in_month = calendar.monthrange(year, month)[1]
+    rows: dict = {}
+    projects_set: set = set()
+    for r in user_reports:
+        date_str = r.get('date', '')
+        try:
+            day = int(date_str[8:10])
+        except (ValueError, IndexError):
+            continue
+        proj  = r.get('project', '?')
+        hours = float(r.get('hours', 0))
+        projects_set.add(proj)
+        rows.setdefault(str(day), {})
+        rows[str(day)][proj] = round(rows[str(day)].get(proj, 0) + hours, 2)
+
+    return jsonify({
+        'year':          year,
+        'month':         month,
+        'days_in_month': days_in_month,
+        'norm':          get_monthly_norm(urec, prefix),
+        'projects':      sorted(projects_set),
+        'rows':          rows,
+    })
+
+
 @app.route('/api/reports', methods=['GET'])
 @admin_required
 def get_reports():

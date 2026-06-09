@@ -555,6 +555,33 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .month-bar-over { background:var(--success,#22c55e); }
 .month-prog-foot { font-size:11px; color:var(--muted); margin-top:5px; }
 
+/* ─── TIMESHEET ─────────────────────────────────── */
+.ts-accordion { margin:0; }
+.ts-accordion-item { border:1px solid var(--border); border-radius:var(--r); margin-bottom:6px; overflow:hidden; }
+.ts-month-btn {
+  width:100%; display:flex; align-items:center; justify-content:space-between;
+  padding:11px 14px; background:var(--white); border:none; cursor:pointer;
+  font-size:14px; font-weight:500; color:var(--text); text-align:left;
+  user-select:none; -webkit-user-select:none;
+}
+.ts-month-btn:hover { background:var(--surface); }
+.ts-chevron { font-size:10px; color:var(--muted); transition:transform .2s; display:inline-block; }
+.ts-month-btn-open .ts-chevron { transform:rotate(180deg); }
+.ts-month-panel { padding:0 8px 10px; background:var(--white); }
+.ts-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:6px; }
+.ts-table { border-collapse:collapse; font-size:11px; min-width:max-content; }
+.ts-table th, .ts-table td {
+  border:1px solid var(--border); padding:4px 6px;
+  text-align:center; white-space:nowrap;
+}
+.ts-table th { background:var(--surface); font-weight:600; position:sticky; top:0; }
+.ts-proj-cell { text-align:left !important; min-width:130px; max-width:200px; overflow:hidden; text-overflow:ellipsis; position:sticky; left:0; background:var(--white); z-index:1; }
+.ts-table th.ts-proj-cell { background:var(--surface); z-index:2; }
+.ts-weekend { background:rgba(220,38,38,.07) !important; }
+.ts-total-col { font-weight:600; background:var(--surface) !important; }
+.ts-total-row td { font-weight:600; background:var(--surface) !important; }
+.ts-norm-hint { font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; }
+
 /* ─── STATS ──────────────────────────────────────── */
 .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
 .stat-tile {
@@ -1806,6 +1833,29 @@ function renderStats() {
   }
 
   document.getElementById('statsSub').textContent = 'За всё время';
+
+  // Табель — аккордеон по месяцам
+  const months = s?.months_with_reports || [];
+  let timesheetHtml = '';
+  if (months.length > 0) {
+    const items = months.map(ym => {
+      const [y, m] = ym.split('-');
+      const name = new Date(parseInt(y), parseInt(m) - 1, 1)
+        .toLocaleString('ru', {month:'long', year:'numeric'});
+      const title = name.charAt(0).toUpperCase() + name.slice(1);
+      return `
+        <div class="ts-accordion-item">
+          <button class="ts-month-btn" onclick="toggleTsMonth(this,'${ym}')">
+            <span>${title}</span><span class="ts-chevron">▼</span>
+          </button>
+          <div class="ts-month-panel" id="ts-${ym}" style="display:none"></div>
+        </div>`;
+    }).join('');
+    timesheetHtml = `
+      <label class="field-label" style="margin:16px 0 8px">Табель</label>
+      <div class="ts-accordion">${items}</div>`;
+  }
+
   el.innerHTML = progressHtml + `
     <div class="stat-grid">
       <div class="stat-tile"><div class="stat-val">${s.total_hours}</div><div class="stat-lbl">Часов всего</div></div>
@@ -1817,8 +1867,104 @@ function renderStats() {
         <span class="proj-stat-name">${p}</span>
         <span class="proj-stat-hrs">${h} ч</span>
       </div>`).join('')}
+    ${timesheetHtml}
   `;
 }
+
+// ── ТАБЕЛЬ ────────────────────────────────────────────
+function toggleTsMonth(btn, ym) {
+  const panel  = document.getElementById('ts-' + ym);
+  const isOpen = panel.style.display !== 'none';
+  if (isOpen) {
+    panel.style.display = 'none';
+    btn.classList.remove('ts-month-btn-open');
+  } else {
+    panel.style.display = '';
+    btn.classList.add('ts-month-btn-open');
+    if (!panel.dataset.loaded) {
+      panel.dataset.loaded = '1';
+      const [y, m] = ym.split('-');
+      loadTimesheet(parseInt(y), parseInt(m), panel);
+    }
+  }
+}
+
+async function loadTimesheet(year, month, container) {
+  container.innerHTML = '<div style="padding:10px 2px;color:var(--muted);font-size:13px">Загрузка…</div>';
+  try {
+    const resp = await fetch(`/api/user/timesheet?year=${year}&month=${month}`, {
+      headers: {'Authorization': 'Bearer ' + AUTH.token}
+    });
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    container.innerHTML = buildTimesheetTable(data);
+  } catch(e) {
+    container.innerHTML = '<div style="padding:10px 2px;color:var(--danger);font-size:13px">Ошибка загрузки</div>';
+  }
+}
+
+function buildTimesheetTable(data) {
+  const {year, month, days_in_month, norm, projects, rows} = data;
+  if (!projects.length) {
+    return '<div style="padding:10px 2px;color:var(--muted);font-size:13px">Нет данных за этот месяц</div>';
+  }
+
+  const weekends = new Set();
+  for (let d = 1; d <= days_in_month; d++) {
+    const dow = new Date(year, month - 1, d).getDay();
+    if (dow === 0 || dow === 6) weekends.add(d);
+  }
+
+  const totByDay  = {};
+  const totByProj = {};
+  let   grand     = 0;
+  for (const [ds, dayObj] of Object.entries(rows)) {
+    const d = parseInt(ds);
+    for (const [proj, hrs] of Object.entries(dayObj)) {
+      totByDay[d]    = _r2((totByDay[d]    || 0) + hrs);
+      totByProj[proj] = _r2((totByProj[proj] || 0) + hrs);
+      grand           = _r2(grand + hrs);
+    }
+  }
+
+  const days = Array.from({length: days_in_month}, (_, i) => i + 1);
+
+  const headCells = days.map(d =>
+    `<th${weekends.has(d) ? ' class="ts-weekend"' : ''}>${d}</th>`
+  ).join('');
+
+  const projRows = projects.map(proj => {
+    const cells = days.map(d => {
+      const hrs = (rows[String(d)] || {})[proj] || 0;
+      return `<td${weekends.has(d) ? ' class="ts-weekend"' : ''}>${hrs > 0 ? hrs : ''}</td>`;
+    }).join('');
+    return `<tr><td class="ts-proj-cell">${proj}</td>${cells}<td class="ts-total-col">${totByProj[proj] || 0}</td></tr>`;
+  }).join('');
+
+  const totCells = days.map(d =>
+    `<td${weekends.has(d) ? ' class="ts-weekend"' : ''}>${totByDay[d] || ''}</td>`
+  ).join('');
+
+  return `
+    <div class="ts-table-wrap">
+      <table class="ts-table">
+        <thead><tr>
+          <th class="ts-proj-cell">Проект</th>${headCells}
+          <th class="ts-total-col">Итого</th>
+        </tr></thead>
+        <tbody>
+          ${projRows}
+          <tr class="ts-total-row">
+            <td class="ts-proj-cell">Итого</td>${totCells}
+            <td class="ts-total-col">${grand}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ts-norm-hint">Норма за месяц: ${norm} ч · Факт: ${grand} ч · ${norm > 0 ? Math.round(grand / norm * 100) : 0}%</div>`;
+}
+
+function _r2(n) { return Math.round(n * 100) / 100; }
 
 // ══════════════════════════════════════════════════════
 // ADMIN
