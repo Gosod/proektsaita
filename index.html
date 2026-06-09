@@ -63,6 +63,11 @@ html[data-theme="dark"] {
 /* ─── RESET ──────────────────────────────────────── */
 *,*::before,*::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 
+/* Плавная смена темы */
+html.theme-transitioning * {
+  transition: background-color .35s ease, color .35s ease, border-color .35s ease, fill .35s ease !important;
+}
+
 body {
   font-family:var(--font); color:var(--text);
   min-height:100vh; font-size:14px; line-height:1.5;
@@ -569,7 +574,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .ts-chevron { font-size:10px; color:var(--muted); transition:transform .2s; display:inline-block; }
 .ts-month-btn-open .ts-chevron { transform:rotate(180deg); }
 .ts-month-panel { padding:0 8px 10px; background:var(--white); }
-.ts-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:6px; }
+.ts-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:6px; user-select:none; -webkit-user-select:none; }
 .ts-table { border-collapse:collapse; font-size:11px; min-width:max-content; }
 .ts-table th, .ts-table td {
   border:1px solid var(--border); padding:4px 6px;
@@ -729,7 +734,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 
 /* ─── EMPTY ──────────────────────────────────────── */
-.empty { text-align:center; padding:48px 20px; color:var(--muted); }
+.empty { text-align:center; padding:48px 20px; color:var(--muted); user-select:none; -webkit-user-select:none; }
 .empty-icon { font-size:36px; margin-bottom:10px; }
 .empty-text { font-size:14px; }
 
@@ -756,6 +761,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .success-screen {
   position: fixed; inset: 0; z-index: 500;
   background: var(--white);
+  user-select:none; -webkit-user-select:none;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   gap: 16px; padding: 32px;
@@ -1214,47 +1220,20 @@ function syncThemeIcon() {
   if (icon) icon.textContent = dark ? '🌙' : '☀️';
 }
 
-let _themeOv     = null;
-let _themeTimers = [];
 
 function toggleTheme(ev) {
-  // Отменяем предыдущую незавершённую анимацию — удаляем старый оверлей
-  if (_themeOv) { _themeOv.remove(); _themeOv = null; }
-  _themeTimers.forEach(t => clearTimeout(t));
-  _themeTimers = [];
-
   const root = document.documentElement;
-  const goingDark = root.getAttribute('data-theme') !== 'dark';
-  const nextBg = goingDark ? '#14181d' : '#F4F6F9';
+  root.classList.add('theme-transitioning');
 
-  // Тема и иконка меняются НЕМЕДЛЕННО — не зависят от анимации
+  const goingDark = root.getAttribute('data-theme') !== 'dark';
   if (goingDark) root.setAttribute('data-theme', 'dark');
   else           root.removeAttribute('data-theme');
   try { localStorage.setItem('phm_theme', goingDark ? 'dark' : 'light'); } catch(e) {}
   syncThemeIcon();
   if (typeof refreshChartsTheme === 'function') refreshChartsTheme();
-
   haptic('light');
 
-  // Визуальный эффект clip-path — поверх, не влияет на состояние
-  let x = window.innerWidth - 30, y = 34;
-  if (ev && ev.clientX) { x = ev.clientX; y = ev.clientY; }
-  const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-
-  const ov = document.createElement('div');
-  ov.style.cssText = `position:fixed;inset:0;z-index:9999;pointer-events:none;
-    background:${nextBg};
-    clip-path:circle(0px at ${x}px ${y}px);
-    transition:clip-path .45s ${getComputedStyle(root).getPropertyValue('--ease')||'ease'};`;
-  document.body.appendChild(ov);
-  _themeOv = ov;
-
-  requestAnimationFrame(() => { ov.style.clipPath = `circle(${r}px at ${x}px ${y}px)`; });
-
-  _themeTimers.push(setTimeout(() => {
-    ov.remove();
-    if (_themeOv === ov) _themeOv = null;
-  }, 480));
+  setTimeout(() => root.classList.remove('theme-transitioning'), 400);
 }
 
 
@@ -1780,6 +1759,7 @@ async function submitReport() {
   document.getElementById('projectSearch').value = '';
   btn.classList.remove('sending');
   buildChips();
+  loadData(); // обновляем статистику пока показывается экран успеха
 }
 
 function showSuccessScreen(lines, total, dateVal) {
@@ -2180,8 +2160,8 @@ async function renderAdminAccess() {
         <div class="acc-actions">
           <button class="act-btn" onclick="accGenCode('${e.id}')">Выдать код</button>
           <button class="act-btn" onclick="accReset('${e.id}','${nm}')">Сброс пароля</button>
-          ${e.is_test ? '' : `<button class="act-btn" onclick="accSetSchedule('${e.id}','${e.schedule||''}',${e.monthly_norm})">Расписание</button>`}
-          ${e.is_test ? '' : `<button class="act-btn" onclick="accVacation('${e.id}','${nm}')">Отпуск</button>`}
+          <button class="act-btn" onclick="accSetSchedule('${e.id}','${e.schedule||''}',${e.monthly_norm})">Расписание</button>
+          <button class="act-btn" onclick="accVacation('${e.id}','${nm}')">Отпуск</button>
           ${e.is_admin ? '' : `<button class="act-btn del" onclick="accDelete('${e.id}','${nm}')">Удалить</button>`}
         </div>
       </div>`;

@@ -8,9 +8,10 @@
 import json
 import os
 
-BASE_DIR          = os.path.dirname(os.path.abspath(__file__))
-USERS_FILE        = os.path.join(BASE_DIR, 'users.json')
+BASE_DIR           = os.path.dirname(os.path.abspath(__file__))
+USERS_FILE         = os.path.join(BASE_DIR, 'users.json')
 REPORTS_LOCAL_FILE = os.path.join(BASE_DIR, 'reports_local.json')
+VACATIONS_FILE     = os.path.join(BASE_DIR, 'vacations.json')
 
 TEST_ACCOUNTS = [
     {'uid': '100000001', 'code': 'TEST',    'display': 'ТЕСТ Тестовый',      'schedule': '5/2'},
@@ -59,6 +60,19 @@ def main():
         removed = len(reports) - len(kept)
         if removed:
             print(f'🗑  Удалено {removed} тестовых отчётов из reports_local.json')
+
+    # Очищаем отпуска тест-аккаунтов
+    if os.path.exists(VACATIONS_FILE):
+        with open(VACATIONS_FILE, 'r', encoding='utf-8') as f:
+            vacations = json.load(f)
+        test_uid_strs = {a['uid'] for a in TEST_ACCOUNTS}
+        removed_vac = sum(1 for uid in test_uid_strs if uid in vacations)
+        for uid in test_uid_strs:
+            vacations.pop(uid, None)
+        with open(VACATIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(vacations, f, ensure_ascii=False, indent=2)
+        if removed_vac:
+            print(f'🗑  Очищены отпуска {removed_vac} тест-аккаунтов из vacations.json')
 
     print('\nПерезапуск сервера не нужен.')
 
