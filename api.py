@@ -768,6 +768,16 @@ def submit_report_pwa():
     else:
         dt = msk_now()
 
+    # Конфликт: день отмечен как отпуск → отчёт сдавать нельзя
+    date_str = dt.strftime('%Y-%m-%d')
+    user_vac = load_json(VACATIONS_FILE, {}).get(str(uid), {})
+    if date_str in user_vac:
+        return jsonify({
+            'error':    f'День {date_str} отмечен как отпуск. Обратитесь к админу, чтобы снять отметку.',
+            'conflict': 'vacation',
+            'date':     date_str,
+        }), 409
+
     errors = 0
     saved  = []
     for item in projects:
@@ -893,6 +903,30 @@ def admin_set_vacation():
     all_users = load_json(USERS_FILE, {})
     if uid not in all_users:
         return jsonify({'error': 'Пользователь не найден'}), 404
+
+    # Конфликт: если в диапазоне у сотрудника уже есть отчёты — блокируем
+    urec  = all_users[uid]
+    uname = urec.get('username', '').lower()
+    range_dates = set()
+    _cur = cur
+    while _cur <= end:
+        range_dates.add(_cur.strftime('%Y-%m-%d'))
+        _cur += timedelta(days=1)
+    combined = _normalize_sheets_records(sheets_read_all(), all_users)
+    if urec.get('is_test'):
+        combined = combined + local_reports_for_user(int(uid), uname)
+    conflict_dates = sorted({
+        r.get('date', '') for r in combined
+        if (r.get('user_id') == int(uid) or (uname and r.get('username', '').lower() == uname))
+        and r.get('date', '') in range_dates
+    })
+    if conflict_dates:
+        return jsonify({
+            'error':    f'У сотрудника есть отчёты за: {", ".join(conflict_dates)}. Сначала удалите их.',
+            'conflict': 'reports',
+            'dates':    conflict_dates,
+        }), 409
+
     vacations = load_json(VACATIONS_FILE, {})
     user_vac  = vacations.get(uid, {})
     added = 0
@@ -917,6 +951,7 @@ def admin_del_vacation():
     if uid in vacations and date in vacations[uid]:
         del vacations[uid][date]
         save_json(VACATIONS_FILE, vacations)
+        log.info(f"ADMIN_VAC_DEL | by={request.current_user.get('uid')} | uid={uid} | date={date}")
     return jsonify({'success': True})
 
 
@@ -1232,28 +1267,6 @@ def admin_employee_reset():
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
     log.info(f"ADMIN_EMP_RESET | by={request.current_user.get('uid')} | uid={uid}")
-    return jsonify({'success': True})
-
-
-@app.route('/api/admin/employee/norm', methods=['POST'])
-@admin_token_required
-def admin_employee_norm():
-    """Установить месячную норму часов для сотрудника."""
-    data = request.get_json(silent=True) or {}
-    uid  = str(data.get('user_id', ''))
-    try:
-        norm = int(data.get('monthly_norm', 0))
-        if norm < 0 or norm > 744:
-            raise ValueError()
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Некорректное значение (0–744 ч)'}), 400
-    users = load_json(USERS_FILE, {})
-    if uid not in users:
-        return jsonify({'error': 'Пользователь не найден'}), 404
-    users[uid]['monthly_norm'] = norm
-    if not save_json(USERS_FILE, users):
-        return jsonify({'error': 'Не удалось сохранить'}), 500
-    log.info(f"ADMIN_EMP_NORM | by={request.current_user.get('uid')} | uid={uid} | norm={norm}")
     return jsonify({'success': True})
 
 
