@@ -1945,11 +1945,8 @@ function buildTimesheetTable(data) {
     vacTotal     = _r2(vacTotal + h);
   }
 
-  // Обед/перерывы — 1ч за каждый день с данными
-  const lunchDays = new Set([
-    ...Object.keys(rows).map(Number),
-    ...Object.keys(vac).map(Number),
-  ]);
+  // Обед/перерывы — 1ч только в дни с рабочими отчётами (не в отпуск)
+  const lunchDays = new Set(Object.keys(rows).map(Number));
   let lunchTotal = 0;
   lunchDays.forEach(d => {
     totByDay[d] = _r2((totByDay[d] || 0) + 1);
