@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Сброс тест-сотрудника в исходное «незарегистрированное» состояние.
-Используется только для локального тестирования цикла регистрации по коду.
+Сброс тест-сотрудников в исходное «незарегистрированное» состояние.
+Используется только для локального тестирования.
 
 Запуск:  py reset_test.py
 """
@@ -11,34 +11,36 @@ import os
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 USERS_FILE = os.path.join(BASE_DIR, 'users.json')
 
-TEST_UID  = '100000001'
-TEST_CODE = 'TEST'
+TEST_ACCOUNTS = [
+    {'uid': '100000001', 'code': 'TEST',    'display': 'ТЕСТ Тестовый',       'norm': 160},
+    {'uid': '100000002', 'code': 'TESTADM', 'display': 'ТЕСТ Администратор',  'norm': 0},
+]
 
 
 def main():
     with open(USERS_FILE, 'r', encoding='utf-8') as f:
         users = json.load(f)
 
-    if TEST_UID not in users:
-        print(f'❌ Тест-сотрудник {TEST_UID} не найден в users.json')
-        return
-
-    u = users[TEST_UID]
-    u['password_hash'] = None
-    u['pin_hash']      = None
-    u['invite_code']   = TEST_CODE
-    u['invite_used']   = False
-    u['registered_at'] = ''
-    u['status']        = 'active'
-    u['is_test']       = True
+    for acc in TEST_ACCOUNTS:
+        uid = acc['uid']
+        if uid not in users:
+            print(f'⚠️  {acc["display"]} (id {uid}) не найден — пропускаю')
+            continue
+        u = users[uid]
+        u['password_hash'] = None
+        u['pin_hash']      = None
+        u['invite_code']   = acc['code']
+        u['invite_used']   = False
+        u['registered_at'] = ''
+        u['status']        = 'active'
+        u['is_test']       = True
+        u['monthly_norm']  = acc['norm']
+        print(f'✅ {acc["display"]} (id {uid}) — сброшен, код: {acc["code"]}')
 
     with open(USERS_FILE, 'w', encoding='utf-8') as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
 
-    print('✅ Тест-сотрудник сброшен:')
-    print(f'   {u.get("display_name")} (id {TEST_UID})')
-    print(f'   код-приглашение: {TEST_CODE}, пароль очищен')
-    print('   Можно снова регистрироваться. Перезапуск сервера не нужен.')
+    print('\nПерезапуск сервера не нужен.')
 
 
 if __name__ == '__main__':
