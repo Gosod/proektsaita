@@ -159,7 +159,9 @@ input,textarea,select { font-family:var(--font); }
   background: var(--white); border-radius: 20px;
   padding: 28px 24px; width: 100%; max-width: 360px;
   box-shadow: 0 8px 40px rgba(0,0,0,.12);
+  user-select: none; -webkit-user-select: none;
 }
+.auth-card input { user-select: text; -webkit-user-select: text; }
 .auth-logo {
   display: flex; flex-direction: column; align-items: center;
   margin-bottom: 24px; gap: 10px;
@@ -797,7 +799,7 @@ input[type="range"]::-moz-range-thumb {
         <path d="M109.481 34.2047H172.949V27.3635H109.481V34.2047Z" fill="#0069D2"/>
         <path d="M109.481 47.8869H172.949V41.0458H109.481V47.8869Z" fill="#0069D2"/>
       </svg>
-      <span class="auth-logo-name">фотомеханика</span>
+      <span class="auth-logo-name">Фотомеханика</span>
     </div>
     <div class="auth-title">Добро пожаловать</div>
     <div class="auth-sub">Выберите имя, введите код от администратора и придумайте пароль</div>
@@ -848,7 +850,7 @@ input[type="range"]::-moz-range-thumb {
         <path d="M109.481 34.2047H172.949V27.3635H109.481V34.2047Z" fill="#0069D2"/>
         <path d="M109.481 47.8869H172.949V41.0458H109.481V47.8869Z" fill="#0069D2"/>
       </svg>
-      <span class="auth-logo-name">фотомеханика</span>
+      <span class="auth-logo-name">Фотомеханика</span>
     </div>
     <div class="auth-title">Вход</div>
     <div class="auth-sub">Введите пароль для входа</div>

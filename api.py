@@ -159,6 +159,19 @@ if os.environ.get('SERVE_STATIC') == '1':
     def _serve_manifest():
         return send_from_directory(BASE_DIR, 'manifest.json')
 
+    # Необязательная статика (иконки, фон). Если файла нет — тихо 204,
+    # чтобы не засорять лог 404-ответами при локальном тесте.
+    @app.route('/favicon.ico')
+    @app.route('/bg.jpg')
+    @app.route('/icon-192.png')
+    @app.route('/icon-512.png')
+    def _serve_optional_static():
+        fname = request.path.lstrip('/')
+        fpath = os.path.join(BASE_DIR, fname)
+        if os.path.exists(fpath):
+            return send_from_directory(BASE_DIR, fname)
+        return '', 204
+
 # ══════════════════════════════════════════════════════
 # JSON HELPERS (атомарная запись)
 # ══════════════════════════════════════════════════════
