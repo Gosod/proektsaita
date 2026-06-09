@@ -42,6 +42,7 @@ PROJECTS_FILE    = os.path.join(BASE_DIR, 'projects.json')
 USER_PROJECTS_FILE = os.path.join(BASE_DIR, 'user_projects.json')
 CREDENTIALS_FILE = os.path.join(BASE_DIR, 'credentials.json')
 REPORTS_LOCAL_FILE = os.path.join(BASE_DIR, 'reports_local.json')
+VACATIONS_FILE   = os.path.join(BASE_DIR, 'vacations.json')
 
 SPREADSHEET_ID   = os.environ.get('SPREADSHEET_ID', '')
 SHEET_REPORTS    = 'Отчёты'
@@ -894,6 +895,15 @@ def user_timesheet():
         rows.setdefault(str(day), {})
         rows[str(day)][proj] = round(rows[str(day)].get(proj, 0) + hours, 2)
 
+    # Отпускные дни за этот месяц
+    vacations  = load_json(VACATIONS_FILE, {})
+    user_vac   = vacations.get(uid, {})
+    vacation_month = {
+        str(int(d[8:10])): h
+        for d, h in user_vac.items()
+        if d.startswith(prefix)
+    }
+
     return jsonify({
         'year':          year,
         'month':         month,
@@ -901,7 +911,74 @@ def user_timesheet():
         'norm':          get_monthly_norm(urec, prefix),
         'projects':      sorted(projects_set),
         'rows':          rows,
+        'vacation':      vacation_month,
     })
+
+
+# ── Отпуска (admin) ───────────────────────────────
+
+@app.route('/api/admin/employee/vacation', methods=['GET'])
+@admin_token_required
+def admin_get_vacation():
+    uid = str(request.args.get('user_id', ''))
+    if not uid:
+        return jsonify({'error': 'user_id обязателен'}), 400
+    vacations = load_json(VACATIONS_FILE, {})
+    return jsonify({'vacation': vacations.get(uid, {})})
+
+
+@app.route('/api/admin/employee/vacation', methods=['POST'])
+@admin_token_required
+def admin_set_vacation():
+    """Добавить/заменить отпускные дни (диапазон дат)."""
+    data  = request.get_json(silent=True) or {}
+    uid   = str(data.get('user_id', ''))
+    d_from = str(data.get('date_from', ''))
+    d_to   = str(data.get('date_to',   ''))
+    try:
+        hours = float(data.get('hours', 8))
+        if hours <= 0 or hours > 24:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Некорректное количество часов'}), 400
+    try:
+        from datetime import date as _date, timedelta as _td
+        cur = datetime.strptime(d_from, '%Y-%m-%d').date()
+        end = datetime.strptime(d_to,   '%Y-%m-%d').date()
+        if end < cur:
+            raise ValueError()
+    except Exception:
+        return jsonify({'error': 'Некорректные даты'}), 400
+
+    all_users = load_json(USERS_FILE, {})
+    if uid not in all_users:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+
+    vacations = load_json(VACATIONS_FILE, {})
+    user_vac  = vacations.get(uid, {})
+    added = 0
+    while cur <= end:
+        user_vac[cur.strftime('%Y-%m-%d')] = hours
+        cur += timedelta(days=1)
+        added += 1
+    vacations[uid] = user_vac
+    if not save_json(VACATIONS_FILE, vacations):
+        return jsonify({'error': 'Не удалось сохранить'}), 500
+    log.info(f"ADMIN_VAC_ADD | by={request.current_user.get('uid')} | uid={uid} | from={d_from} to={d_to} | days={added}")
+    return jsonify({'success': True, 'added': added})
+
+
+@app.route('/api/admin/employee/vacation', methods=['DELETE'])
+@admin_token_required
+def admin_del_vacation():
+    data = request.get_json(silent=True) or {}
+    uid  = str(data.get('user_id', ''))
+    date = str(data.get('date', ''))
+    vacations = load_json(VACATIONS_FILE, {})
+    if uid in vacations and date in vacations[uid]:
+        del vacations[uid][date]
+        save_json(VACATIONS_FILE, vacations)
+    return jsonify({'success': True})
 
 
 @app.route('/api/reports', methods=['GET'])

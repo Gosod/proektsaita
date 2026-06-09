@@ -580,6 +580,10 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .ts-weekend { background:rgba(220,38,38,.07) !important; }
 .ts-total-col { font-weight:600; background:var(--surface) !important; }
 .ts-total-row td { font-weight:600; background:var(--surface) !important; }
+.ts-vac-row td { background:rgba(59,130,246,.07) !important; }
+.ts-vac-cell { color:var(--blue); font-style:italic; }
+.ts-lunch-row td { background:rgba(100,100,100,.05) !important; }
+.ts-lunch-cell { color:var(--muted); font-style:italic; }
 .ts-norm-hint { font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; }
 
 /* ─── STATS ──────────────────────────────────────── */
@@ -1907,8 +1911,10 @@ async function loadTimesheet(year, month, container) {
 }
 
 function buildTimesheetTable(data) {
-  const {year, month, days_in_month, norm, projects, rows} = data;
-  if (!projects.length) {
+  const {year, month, days_in_month, norm, projects, rows, vacation} = data;
+  const vac = vacation || {};
+  const hasData = projects.length || Object.keys(vac).length;
+  if (!hasData) {
     return '<div style="padding:10px 2px;color:var(--muted);font-size:13px">Нет данных за этот месяц</div>';
   }
 
@@ -1924,29 +1930,63 @@ function buildTimesheetTable(data) {
   for (const [ds, dayObj] of Object.entries(rows)) {
     const d = parseInt(ds);
     for (const [proj, hrs] of Object.entries(dayObj)) {
-      totByDay[d]    = _r2((totByDay[d]    || 0) + hrs);
+      totByDay[d]     = _r2((totByDay[d]    || 0) + hrs);
       totByProj[proj] = _r2((totByProj[proj] || 0) + hrs);
-      grand           = _r2(grand + hrs);
+      grand            = _r2(grand + hrs);
     }
   }
 
-  const days = Array.from({length: days_in_month}, (_, i) => i + 1);
+  // Отпуск — добавляем к суточным итогам
+  let vacTotal = 0;
+  for (const [ds, h] of Object.entries(vac)) {
+    const d = parseInt(ds);
+    totByDay[d] = _r2((totByDay[d] || 0) + h);
+    grand        = _r2(grand + h);
+    vacTotal     = _r2(vacTotal + h);
+  }
 
-  const headCells = days.map(d =>
-    `<th${weekends.has(d) ? ' class="ts-weekend"' : ''}>${d}</th>`
-  ).join('');
+  // Обед/перерывы — 1ч за каждый день с данными
+  const lunchDays = new Set([
+    ...Object.keys(rows).map(Number),
+    ...Object.keys(vac).map(Number),
+  ]);
+  let lunchTotal = 0;
+  lunchDays.forEach(d => {
+    totByDay[d] = _r2((totByDay[d] || 0) + 1);
+    grand        = _r2(grand + 1);
+    lunchTotal++;
+  });
+
+  const days = Array.from({length: days_in_month}, (_, i) => i + 1);
+  const wkCls = d => weekends.has(d) ? ' class="ts-weekend"' : '';
+
+  const headCells = days.map(d => `<th${wkCls(d)}>${d}</th>`).join('');
 
   const projRows = projects.map(proj => {
     const cells = days.map(d => {
       const hrs = (rows[String(d)] || {})[proj] || 0;
-      return `<td${weekends.has(d) ? ' class="ts-weekend"' : ''}>${hrs > 0 ? hrs : ''}</td>`;
+      return `<td${wkCls(d)}>${hrs > 0 ? hrs : ''}</td>`;
     }).join('');
     return `<tr><td class="ts-proj-cell">${proj}</td>${cells}<td class="ts-total-col">${totByProj[proj] || 0}</td></tr>`;
   }).join('');
 
-  const totCells = days.map(d =>
-    `<td${weekends.has(d) ? ' class="ts-weekend"' : ''}>${totByDay[d] || ''}</td>`
-  ).join('');
+  // Строка «Отпуск» (только если есть данные)
+  const vacRow = vacTotal > 0 ? `
+    <tr class="ts-vac-row">
+      <td class="ts-proj-cell ts-vac-cell">Отпуск</td>
+      ${days.map(d => `<td${wkCls(d)}>${vac[String(d)] ? vac[String(d)] : ''}</td>`).join('')}
+      <td class="ts-total-col">${vacTotal}</td>
+    </tr>` : '';
+
+  // Строка «Обед/перерывы» (всегда, если есть хоть один рабочий день)
+  const lunchRow = lunchTotal > 0 ? `
+    <tr class="ts-lunch-row">
+      <td class="ts-proj-cell ts-lunch-cell">Обед/перерывы</td>
+      ${days.map(d => `<td${wkCls(d)}>${lunchDays.has(d) ? 1 : ''}</td>`).join('')}
+      <td class="ts-total-col">${lunchTotal}</td>
+    </tr>` : '';
+
+  const totCells = days.map(d => `<td${wkCls(d)}>${totByDay[d] || ''}</td>`).join('');
 
   return `
     <div class="ts-table-wrap">
@@ -1957,6 +1997,8 @@ function buildTimesheetTable(data) {
         </tr></thead>
         <tbody>
           ${projRows}
+          ${vacRow}
+          ${lunchRow}
           <tr class="ts-total-row">
             <td class="ts-proj-cell">Итого</td>${totCells}
             <td class="ts-total-col">${grand}</td>
@@ -2147,6 +2189,7 @@ async function renderAdminAccess() {
           <button class="act-btn" onclick="accGenCode('${e.id}')">Выдать код</button>
           <button class="act-btn" onclick="accReset('${e.id}','${nm}')">Сброс пароля</button>
           ${e.is_test ? '' : `<button class="act-btn" onclick="accSetSchedule('${e.id}','${e.schedule||''}',${e.monthly_norm})">Расписание</button>`}
+          <button class="act-btn" onclick="accVacation('${e.id}','${nm}')">Отпуск</button>
           ${e.is_admin ? '' : `<button class="act-btn del" onclick="accDelete('${e.id}','${nm}')">Удалить</button>`}
         </div>
       </div>`;
@@ -2242,6 +2285,90 @@ async function accSubmitSchedule(uid) {
     toast('Расписание обновлено','ok');
     renderAdminAccess();
   } catch(e) { toast('Ошибка: '+(e.message||'не удалось'),'err'); }
+}
+
+async function accVacation(uid, name) {
+  const old = document.getElementById('_vacModal'); if (old) old.remove();
+  const d = document.createElement('div');
+  d.id = '_vacModal'; d.className = 'modal-bg open';
+
+  // Загружаем существующие отпуска
+  let existing = {};
+  try {
+    const r = await fetch(`/api/admin/employee/vacation?user_id=${uid}`, {
+      headers: {'Authorization': 'Bearer ' + AUTH.token}
+    });
+    existing = (await r.json()).vacation || {};
+  } catch(e) {}
+
+  const sorted = Object.entries(existing).sort(([a],[b]) => a.localeCompare(b));
+  const listHtml = sorted.length
+    ? sorted.map(([dt, h]) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:13px">
+          <span>${dt} — ${h} ч</span>
+          <button class="act-btn del" style="padding:2px 8px;font-size:11px" onclick="accDelVacation('${uid}','${dt}',this)">✕</button>
+        </div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px;padding:4px 0">Отпуска не назначены</div>';
+
+  d.innerHTML = `
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">Отпуск: ${name}</span>
+        <button class="modal-close" onclick="document.getElementById('_vacModal').remove()">✕</button>
+      </div>
+      <div style="max-height:160px;overflow-y:auto;margin-bottom:12px;border:1px solid var(--border);border-radius:var(--r);padding:8px 10px" id="_vacList">${listHtml}</div>
+      <div class="field">
+        <label class="field-label">С</label>
+        <input type="date" class="field-input" id="vacFrom">
+      </div>
+      <div class="field">
+        <label class="field-label">По</label>
+        <input type="date" class="field-input" id="vacTo">
+      </div>
+      <div class="field">
+        <label class="field-label">Часов в день</label>
+        <input type="number" class="field-input" id="vacHours" value="8" min="1" max="24" step="0.5">
+      </div>
+      <button class="btn btn-primary" onclick="accSubmitVacation('${uid}')">Добавить дни</button>
+    </div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', ev => { if (ev.target === d) d.remove(); });
+  // Подставляем сегодня по умолчанию
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('vacFrom').value = today;
+  document.getElementById('vacTo').value   = today;
+}
+
+async function accSubmitVacation(uid) {
+  const from  = document.getElementById('vacFrom').value;
+  const to    = document.getElementById('vacTo').value;
+  const hours = parseFloat(document.getElementById('vacHours').value);
+  if (!from || !to) { toast('Укажите даты','err'); return; }
+  if (isNaN(hours) || hours <= 0) { toast('Укажите часы','err'); return; }
+  try {
+    const resp = await fetch('/api/admin/employee/vacation', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+      body: JSON.stringify({user_id: uid, date_from: from, date_to: to, hours})
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error || '');
+    const data = await resp.json();
+    toast(`Добавлено ${data.added} дн.`, 'ok');
+    document.getElementById('_vacModal')?.remove();
+    accVacation(uid, '');
+  } catch(e) { toast('Ошибка: ' + (e.message || 'не удалось'), 'err'); }
+}
+
+async function accDelVacation(uid, date, btn) {
+  try {
+    await fetch('/api/admin/employee/vacation', {
+      method: 'DELETE',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+      body: JSON.stringify({user_id: uid, date})
+    });
+    btn.closest('div').remove();
+    toast('День удалён', 'ok');
+  } catch(e) { toast('Ошибка','err'); }
 }
 
 function accReset(uid, name) {
