@@ -169,10 +169,10 @@ input,textarea,select { font-family:var(--font); }
   font-size: 13px; font-weight: 500; color: var(--muted);
   letter-spacing: .5px;
 }
-.auth-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; text-align: center; }
-.auth-sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 20px; line-height: 1.5; }
+.auth-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; text-align: center; user-select: none; }
+.auth-sub { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 20px; line-height: 1.5; user-select: none; }
 .auth-field { margin-bottom: 14px; }
-.auth-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+.auth-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; display: block; margin-bottom: 6px; user-select: none; }
 .auth-input {
   width: 100%; padding: 12px 14px;
   border: 1.5px solid var(--border); border-radius: var(--r);
@@ -2715,6 +2715,8 @@ function hideAllAuth() {
 function showRegister() { hideAllAuth(); document.getElementById('screenRegister').classList.remove('hidden'); }
 function showLogin()    { hideAllAuth(); document.getElementById('screenLogin').classList.remove('hidden'); }
 
+let _authBusy = false;
+
 async function loadUserList() {
   try {
     const resp = await fetch('/api/auth/users');
@@ -2765,6 +2767,7 @@ function onRegUserChange() {
 }
 
 async function doRegister() {
+  if (_authBusy) return; _authBusy = true;
   const sel  = document.getElementById('regUserId');
   const uid  = sel.value;
   const code = document.getElementById('regCode').value.trim();
@@ -2772,10 +2775,10 @@ async function doRegister() {
   const pwd2 = document.getElementById('regPassword2').value;
   const err  = document.getElementById('regErr');
   err.classList.remove('show');
-  if (!uid)         { err.textContent='Выберите сотрудника'; err.classList.add('show'); return; }
-  if (!code)        { err.textContent='Введите код-приглашение от администратора'; err.classList.add('show'); return; }
-  if (pwd.length<6) { err.textContent='Пароль минимум 6 символов'; err.classList.add('show'); return; }
-  if (pwd !== pwd2) { err.textContent='Пароли не совпадают'; err.classList.add('show'); return; }
+  if (!uid)         { err.textContent='Выберите сотрудника'; err.classList.add('show'); _authBusy=false; return; }
+  if (!code)        { err.textContent='Введите код-приглашение от администратора'; err.classList.add('show'); _authBusy=false; return; }
+  if (pwd.length<6) { err.textContent='Пароль минимум 6 символов'; err.classList.add('show'); _authBusy=false; return; }
+  if (pwd !== pwd2) { err.textContent='Пароли не совпадают'; err.classList.add('show'); _authBusy=false; return; }
   try {
     const resp = await fetch('/api/auth/register', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -2799,32 +2802,35 @@ async function doRegister() {
         }
         return;
       }
-      err.textContent=data.error||'Ошибка'; err.classList.add('show'); return;
+      err.textContent=data.error||'Ошибка'; err.classList.add('show'); _authBusy=false; return;
     }
     saveAuth(data);
     localStorage.setItem('phm_display', data.display_name || sel.selectedOptions[0]?.textContent||'');
-    init();
-  } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); }
+    await init();
+    _authBusy = false;
+  } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); _authBusy=false; }
 }
 
 async function doLogin() {
+  if (_authBusy) return; _authBusy = true;
   const uid = document.getElementById('loginUserId').value;
   const pwd = document.getElementById('loginPassword').value;
   const err = document.getElementById('loginErr');
   err.classList.remove('show');
-  if (!uid) { err.textContent='Выберите сотрудника'; err.classList.add('show'); return; }
-  if (!pwd) { err.textContent='Введите пароль'; err.classList.add('show'); return; }
+  if (!uid) { err.textContent='Выберите сотрудника'; err.classList.add('show'); _authBusy=false; return; }
+  if (!pwd) { err.textContent='Введите пароль'; err.classList.add('show'); _authBusy=false; return; }
   try {
     const resp = await fetch('/api/auth/login', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({user_id: uid, password: pwd})
     });
     const data = await resp.json();
-    if (!resp.ok) { err.textContent=data.error||'Ошибка'; err.classList.add('show'); return; }
+    if (!resp.ok) { err.textContent=data.error||'Ошибка'; err.classList.add('show'); _authBusy=false; return; }
     saveAuth(data);
     localStorage.setItem('phm_display', data.display_name || document.getElementById('loginUserId').selectedOptions[0]?.textContent||'');
-    init();
-  } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); }
+    await init();
+    _authBusy = false;
+  } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); _authBusy=false; }
 }
 
 async function checkAuth() {
@@ -2837,6 +2843,7 @@ async function checkAuth() {
 // INIT (после авторизации)
 // ══════════════════════════════════════════════════════
 async function init() {
+  hideAllAuth();
   document.getElementById('topbar').style.display = 'flex';
   document.getElementById('tabsEl').style.display = 'flex';
 
