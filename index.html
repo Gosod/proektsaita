@@ -122,6 +122,12 @@ input,textarea,select { font-family:var(--font); }
   padding:4px 0;
 }
 .logout-link:hover { color:var(--danger,#dc2626); }
+.topbar-logout {
+  background:none; border:none; cursor:pointer; padding:6px; border-radius:8px;
+  color:var(--muted); font-size:18px; line-height:1; display:flex; align-items:center;
+  user-select:none; -webkit-user-select:none; transition:color .2s, background .2s;
+}
+.topbar-logout:hover { color:var(--danger,#dc2626); background:rgba(220,38,38,.08); }
 
 /* ─── TABS ───────────────────────────────────────── */
 .tabs {
@@ -916,6 +922,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme(event)" aria-label="Сменить тему">
     <span class="theme-icon">☀️</span>
   </button>
+  <button class="topbar-logout" id="topbarLogout" onclick="doLogout()" aria-label="Выйти" style="display:none" title="Выйти">⏻</button>
 </div>
 
 <!-- TABS -->
@@ -2805,6 +2812,7 @@ function doLogout() {
   clearAuth();
   document.getElementById('topbar').style.display = 'none';
   document.getElementById('tabsEl').style.display  = 'none';
+  document.getElementById('topbarLogout').style.display = 'none';
   checkAuth();
 }
 
@@ -2947,6 +2955,7 @@ async function init() {
   hideAllAuth();
   document.getElementById('topbar').style.display = 'flex';
   document.getElementById('tabsEl').style.display = 'flex';
+  document.getElementById('topbarLogout').style.display = '';
 
   const hr = new Date().getHours();
   document.getElementById('homeGreet').textContent =
