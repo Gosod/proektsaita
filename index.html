@@ -112,18 +112,16 @@ input,textarea,select { font-family:var(--font); }
   border:1px solid var(--border); border-radius:50%;
   background:var(--bg); display:flex; align-items:center; justify-content:center;
   transition: background .2s, border-color .2s, transform .15s;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 .theme-toggle:active { transform:scale(.9); }
 .theme-icon { font-size:16px; line-height:1; display:block; transition: transform .4s var(--ease); }
-.logout-btn {
-  flex-shrink:0; width:34px; height:34px;
-  border:1px solid var(--border); border-radius:50%;
-  background:var(--bg); display:flex; align-items:center; justify-content:center;
-  transition: background .2s, border-color .2s, transform .15s; cursor:pointer;
-  color:var(--muted); font-size:16px; line-height:1;
+.logout-link {
+  font-size:12px; color:var(--muted); cursor:pointer; display:inline-block;
+  user-select:none; -webkit-user-select:none; background:none; border:none;
+  padding:4px 0;
 }
-.logout-btn:active { transform:scale(.9); }
-.logout-btn:hover { border-color:var(--red,#e53935); color:var(--red,#e53935); }
+.logout-link:hover { color:var(--danger,#dc2626); }
 
 /* ─── TABS ───────────────────────────────────────── */
 .tabs {
@@ -137,6 +135,7 @@ input,textarea,select { font-family:var(--font); }
   color:var(--muted); font:500 13px var(--font);
   white-space:nowrap; flex-shrink:0;
   position:relative; transition:color .2s var(--ease);
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 .tab::after {
   content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
@@ -491,6 +490,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius:20px; background:var(--surface);
   font:600 13px var(--font); color:var(--text);
   transition:all .15s;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 .quick.active,.quick:active { background:var(--blue); border-color:var(--blue); color:#fff; }
 
@@ -530,12 +530,30 @@ input[type="range"]::-moz-range-thumb {
   width:100%; padding:13px; border:none; border-radius:var(--r);
   font:600 14px var(--font); transition:opacity .15s,transform .1s;
   margin-top:8px;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 .btn:active { transform:scale(.98); opacity:.85; }
 .btn-primary { background:var(--blue); color:#fff; }
 .btn-outline { background:transparent; color:var(--text); border:1.5px solid var(--border); }
 .btn-soft { background:var(--blue-lt); color:var(--blue); border:1.5px solid rgba(0,105,210,.15); }
 .btn-danger { background:transparent; color:var(--danger); border:1.5px solid rgba(220,38,38,.25); }
+
+/* глобальная защита от выделения на кнопках (подстраховка) */
+button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+
+/* ─── MONTH PROGRESS ─────────────────────────────── */
+.month-progress {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r); padding:14px 16px; margin-bottom:12px;
+  box-shadow:var(--shadow);
+}
+.month-prog-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+.month-prog-title { font-size:13px; font-weight:600; color:var(--text); }
+.month-prog-nums { font-size:13px; color:var(--muted); }
+.month-bar-bg { height:8px; background:var(--border); border-radius:4px; overflow:hidden; }
+.month-bar-fill { height:100%; background:var(--blue); border-radius:4px; transition:width .4s ease; min-width:2px; }
+.month-bar-over { background:var(--success,#22c55e); }
+.month-prog-foot { font-size:11px; color:var(--muted); margin-top:5px; }
 
 /* ─── STATS ──────────────────────────────────────── */
 .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
@@ -563,6 +581,7 @@ input[type="range"]::-moz-range-thumb {
   border:1.5px solid var(--border); background:transparent;
   color:var(--muted); font:500 12px var(--font);
   white-space:nowrap; flex-shrink:0; transition:all .15s;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 .sub-tab.active { background:var(--blue); border-color:var(--blue); color:#fff; }
 
@@ -603,6 +622,7 @@ input[type="range"]::-moz-range-thumb {
   padding:5px 12px; border-radius:8px;
   border:1px solid var(--border); background:transparent;
   font:500 12px var(--font); transition:all .15s;
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 .act-btn:hover { background:var(--blue-lt); border-color:var(--blue); color:var(--blue); }
 .act-btn.del { color:var(--danger); }
@@ -896,7 +916,6 @@ input[type="range"]::-moz-range-thumb {
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme(event)" aria-label="Сменить тему">
     <span class="theme-icon">☀️</span>
   </button>
-  <button class="logout-btn" onclick="doLogout()" title="Выйти" aria-label="Выйти">⏻</button>
 </div>
 
 <!-- TABS -->
@@ -936,6 +955,9 @@ input[type="range"]::-moz-range-thumb {
       <div class="tile-title">Управление</div>
       <div class="tile-desc">Команда и проекты</div>
     </div>
+  </div>
+  <div style="text-align:center;padding:8px 0 16px">
+    <button class="logout-link" onclick="doLogout()">Выйти</button>
   </div>
 </div>
 
@@ -1130,6 +1152,7 @@ const S = {
   userId: 0, username: '', admin: false,
   projects: [], allProjects: [], allUsers: [],
   userStats: {}, adminStats: null,
+  monthly_norm: 160,
   selectedProject: null, currentHours: 4,
   reportItems: [],
   navHistory: [],
@@ -1157,43 +1180,47 @@ function syncThemeIcon() {
   if (icon) icon.textContent = dark ? '🌙' : '☀️';
 }
 
+let _themeOv     = null;
+let _themeTimers = [];
+
 function toggleTheme(ev) {
+  // Отменяем предыдущую незавершённую анимацию — удаляем старый оверлей
+  if (_themeOv) { _themeOv.remove(); _themeOv = null; }
+  _themeTimers.forEach(t => clearTimeout(t));
+  _themeTimers = [];
+
   const root = document.documentElement;
   const goingDark = root.getAttribute('data-theme') !== 'dark';
   const nextBg = goingDark ? '#14181d' : '#F4F6F9';
 
+  // Тема и иконка меняются НЕМЕДЛЕННО — не зависят от анимации
+  if (goingDark) root.setAttribute('data-theme', 'dark');
+  else           root.removeAttribute('data-theme');
+  try { localStorage.setItem('phm_theme', goingDark ? 'dark' : 'light'); } catch(e) {}
+  syncThemeIcon();
+  if (typeof refreshChartsTheme === 'function') refreshChartsTheme();
+
   haptic('light');
 
-  // Точка старта круга — от тумблера
+  // Визуальный эффект clip-path — поверх, не влияет на состояние
   let x = window.innerWidth - 30, y = 34;
   if (ev && ev.clientX) { x = ev.clientX; y = ev.clientY; }
-
-  // Радиус — до самого дальнего угла экрана
   const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
 
   const ov = document.createElement('div');
-  ov.style.cssText = `position:fixed; inset:0; z-index:9999; pointer-events:none;
+  ov.style.cssText = `position:fixed;inset:0;z-index:9999;pointer-events:none;
     background:${nextBg};
-    clip-path: circle(0px at ${x}px ${y}px);
-    transition: clip-path .5s ${getComputedStyle(root).getPropertyValue('--ease')||'ease'};`;
+    clip-path:circle(0px at ${x}px ${y}px);
+    transition:clip-path .45s ${getComputedStyle(root).getPropertyValue('--ease')||'ease'};`;
   document.body.appendChild(ov);
+  _themeOv = ov;
 
-  requestAnimationFrame(() => {
-    ov.style.clipPath = `circle(${r}px at ${x}px ${y}px)`;
-  });
+  requestAnimationFrame(() => { ov.style.clipPath = `circle(${r}px at ${x}px ${y}px)`; });
 
-  // На середине анимации меняем тему под кругом
-  setTimeout(() => {
-    if (goingDark) root.setAttribute('data-theme','dark');
-    else root.removeAttribute('data-theme');
-    try { localStorage.setItem('phm_theme', goingDark ? 'dark' : 'light'); } catch(e){}
-    syncThemeIcon();
-    // перекрашиваем графики под новую тему
-    if (typeof refreshChartsTheme === 'function') refreshChartsTheme();
-  }, 250);
-
-  // Убираем оверлей после завершения
-  setTimeout(() => ov.remove(), 560);
+  _themeTimers.push(setTimeout(() => {
+    ov.remove();
+    if (_themeOv === ov) _themeOv = null;
+  }, 480));
 }
 
 
@@ -1747,15 +1774,41 @@ function renderStats() {
   const s   = S.userStats;
   const el  = document.getElementById('statsContent');
   if (!el) return;
+
+  // Прогресс-бар месячной нормы — показываем всегда (даже при 0 часах)
+  const norm = S.monthly_norm || 0;
+  const mh   = s?.month_hours || 0;
+  let progressHtml = '';
+  if (norm > 0) {
+    const pct      = Math.min(100, Math.round((mh / norm) * 100));
+    const over     = mh > norm ? Math.round((mh - norm) * 10) / 10 : 0;
+    const monthName = new Date().toLocaleString('ru', { month: 'long', year: 'numeric' });
+    const numsHtml = over > 0
+      ? `${mh} / ${norm} ч <span style="color:var(--success,#22c55e)">+${over}</span>`
+      : `${mh} / ${norm} ч`;
+    progressHtml = `
+      <div class="month-progress">
+        <div class="month-prog-head">
+          <span class="month-prog-title">Норма за ${monthName}</span>
+          <span class="month-prog-nums">${numsHtml}</span>
+        </div>
+        <div class="month-bar-bg">
+          <div class="month-bar-fill ${pct >= 100 ? 'month-bar-over' : ''}" style="width:${pct}%"></div>
+        </div>
+        <div class="month-prog-foot">${pct}% выполнения</div>
+      </div>`;
+  }
+
   if (!s?.total_reports) {
-    document.getElementById('statsSub').textContent = 'Нет данных';
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Создайте первый отчёт</div></div>`;
+    document.getElementById('statsSub').textContent = norm > 0 ? 'За текущий месяц' : 'Нет данных';
+    el.innerHTML = progressHtml + `<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">Создайте первый отчёт</div></div>`;
     return;
   }
+
   document.getElementById('statsSub').textContent = 'За всё время';
-  el.innerHTML = `
+  el.innerHTML = progressHtml + `
     <div class="stat-grid">
-      <div class="stat-tile"><div class="stat-val">${s.total_hours}</div><div class="stat-lbl">Часов</div></div>
+      <div class="stat-tile"><div class="stat-val">${s.total_hours}</div><div class="stat-lbl">Часов всего</div></div>
       <div class="stat-tile"><div class="stat-val">${s.total_reports}</div><div class="stat-lbl">Отчётов</div></div>
     </div>
     <label class="field-label" style="margin-bottom:8px">По проектам</label>
@@ -1929,6 +1982,7 @@ async function renderAdminAccess() {
             : '<span style="color:var(--success)">(активен)</span>'}</div>`
       : `<div class="acc-code acc-code-none">Код не выдан</div>`;
     const nm = (e.display_name||'').replace(/'/g,"\\'");
+    const normLabel = e.is_test ? '' : `<div style="font-size:12px;color:var(--muted);margin:4px 0">Норма: <b>${e.monthly_norm} ч/мес</b></div>`;
     return `
       <div class="emp-card">
         <div class="emp-head">
@@ -1937,9 +1991,11 @@ async function renderAdminAccess() {
         <div class="emp-meta">@${e.username} · id ${e.id}</div>
         <div style="margin:6px 0">${statusBadge}</div>
         ${codeLine}
+        ${normLabel}
         <div class="acc-actions">
           <button class="act-btn" onclick="accGenCode('${e.id}')">Выдать код</button>
           <button class="act-btn" onclick="accReset('${e.id}','${nm}')">Сброс пароля</button>
+          ${e.is_test ? '' : `<button class="act-btn" onclick="accSetNorm('${e.id}',${e.monthly_norm})">Норма</button>`}
           ${e.is_admin ? '' : `<button class="act-btn del" onclick="accDelete('${e.id}','${nm}')">Удалить</button>`}
         </div>
       </div>`;
@@ -1979,6 +2035,43 @@ function accShowCode(code) {
       <button class="btn btn-primary" style="margin-top:0" onclick="document.getElementById('_codeModal').remove()">Понятно</button>
     </div>`;
   document.body.appendChild(d);
+}
+
+function accSetNorm(uid, currentNorm) {
+  const old = document.getElementById('_normModal'); if (old) old.remove();
+  const d = document.createElement('div');
+  d.id = '_normModal'; d.className = 'modal-bg open';
+  d.innerHTML = `
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">Норма часов в месяц</span>
+        <button class="modal-close" onclick="document.getElementById('_normModal').remove()">✕</button>
+      </div>
+      <div class="field">
+        <label class="field-label">Часов в месяц (0–744)</label>
+        <input type="number" class="field-input" id="normInput" value="${currentNorm}" min="0" max="744" step="1">
+      </div>
+      <button class="btn btn-primary" onclick="accSubmitNorm('${uid}')">Сохранить</button>
+    </div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', ev => { if (ev.target === d) d.remove(); });
+  document.getElementById('normInput').focus();
+}
+
+async function accSubmitNorm(uid) {
+  const val = parseInt(document.getElementById('normInput').value);
+  if (isNaN(val) || val < 0 || val > 744) { toast('Введите число от 0 до 744','err'); return; }
+  try {
+    const resp = await fetch('/api/admin/employee/norm', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+      body: JSON.stringify({user_id: uid, monthly_norm: val})
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error||'');
+    document.getElementById('_normModal')?.remove();
+    toast('Норма обновлена','ok');
+    renderAdminAccess();
+  } catch(e) { toast('Ошибка: '+(e.message||'не удалось'),'err'); }
 }
 
 function accReset(uid, name) {
@@ -2030,6 +2123,10 @@ function accAddEmployee() {
         <label class="field-label">Ник (пишется в таблицу отчётов)</label>
         <input type="text" class="field-input" id="newEmpUsername" placeholder="ivanov" maxlength="40">
       </div>
+      <div class="field">
+        <label class="field-label">Норма часов в месяц</label>
+        <input type="number" class="field-input" id="newEmpNorm" value="160" min="0" max="744" step="1">
+      </div>
       <button class="btn btn-primary" onclick="accSubmitAddEmployee()">Создать</button>
     </div>`;
   document.body.appendChild(d);
@@ -2039,13 +2136,14 @@ function accAddEmployee() {
 async function accSubmitAddEmployee() {
   const name  = document.getElementById('newEmpName').value.trim();
   const uname = document.getElementById('newEmpUsername').value.trim();
+  const norm  = parseInt(document.getElementById('newEmpNorm').value) || 160;
   if (!name)  { toast('Введите ФИО','err'); return; }
   if (!uname) { toast('Введите ник','err'); return; }
   try {
     const resp = await fetch('/api/admin/employee/add', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
-      body: JSON.stringify({display_name: name, username: uname})
+      body: JSON.stringify({display_name: name, username: uname, monthly_norm: norm})
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error||'');
@@ -2698,6 +2796,7 @@ function saveAuth(data) {
 }
 
 function clearAuth() {
+  _authBusy = false;
   ['phm_token','phm_uid','phm_uname','phm_pin_set','phm_display'].forEach(k => localStorage.removeItem(k));
   AUTH.token = AUTH.userId = AUTH.username = null;
 }
@@ -2878,6 +2977,7 @@ async function init() {
     S.userStats       = data.user_stats||{};
     S.adminStats      = data.admin_stats||null;
     S.userAssignments = data.user_assignments||{};
+    S.monthly_norm    = data.monthly_norm || 160;
     // Имя в интерфейсе — ВСЕГДА display_name из ответа сервера (единый источник)
     const displayName = data.display_name || S.username || localStorage.getItem('phm_display') || '';
     if (displayName) localStorage.setItem('phm_display', displayName);

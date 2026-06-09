@@ -282,9 +282,9 @@ def get_user_projects(user_id: int) -> list:
     return filtered or all_projects
 
 
-def build_user_stats(user_id: int, all_reports: list) -> dict:
-    # Получаем username для этого user_id
-    all_users = load_json(USERS_FILE, {})
+def build_user_stats(user_id: int, all_reports: list, all_users: dict = None) -> dict:
+    if all_users is None:
+        all_users = load_json(USERS_FILE, {})
     username  = all_users.get(str(user_id), {}).get('username', '').lower()
 
     user_reports = [
@@ -292,6 +292,14 @@ def build_user_stats(user_id: int, all_reports: list) -> dict:
         if r.get('user_id') == user_id
         or (username and r.get('username', '').lower() == username)
     ]
+
+    # Часы за текущий календарный месяц (по московскому времени)
+    month_prefix = msk_now().strftime('%Y-%m')
+    month_hours  = round(sum(
+        r.get('hours', 0) for r in user_reports
+        if r.get('date', '').startswith(month_prefix)
+    ), 2)
+
     by_project = {}
     for r in user_reports:
         proj = r.get('project', '?')
@@ -300,6 +308,7 @@ def build_user_stats(user_id: int, all_reports: list) -> dict:
         'total_hours':   round(sum(r.get('hours', 0) for r in user_reports), 2),
         'total_reports': len(user_reports),
         'by_project':    by_project,
+        'month_hours':   month_hours,
     }
 
 
@@ -576,7 +585,7 @@ def init_data():
     all_reports = sheets_read_all()
     all_reports = _normalize_sheets_records(all_reports, all_users)
 
-    user_stats = build_user_stats(int(user_id), all_reports)
+    user_stats = build_user_stats(int(user_id), all_reports, all_users)
 
     _urec = all_users.get(str(user_id), {})
     resp = {
@@ -586,6 +595,7 @@ def init_data():
         'display_name': _urec.get('display_name', _urec.get('username', '')),
         'projects':     user_projects,
         'user_stats':   user_stats,
+        'monthly_norm': int(_urec.get('monthly_norm', 160) or 160),
     }
 
     if is_admin(user_id):
@@ -968,15 +978,16 @@ def admin_employees():
     result = []
     for uid, u in users.items():
         result.append({
-            'id':           uid,
-            'username':     u.get('username', ''),
-            'display_name': u.get('display_name', u.get('username', '')),
-            'registered':   bool(u.get('password_hash')),
-            'has_pin':      bool(u.get('pin_hash')),
-            'invite_code':  u.get('invite_code'),
-            'invite_used':  bool(u.get('invite_used', False)),
-            'is_test':      bool(u.get('is_test', False)),
-            'is_admin':     is_admin(uid),
+            'id':            uid,
+            'username':      u.get('username', ''),
+            'display_name':  u.get('display_name', u.get('username', '')),
+            'registered':    bool(u.get('password_hash')),
+            'has_pin':       bool(u.get('pin_hash')),
+            'invite_code':   u.get('invite_code'),
+            'invite_used':   bool(u.get('invite_used', False)),
+            'is_test':       bool(u.get('is_test', False)),
+            'is_admin':      is_admin(uid),
+            'monthly_norm':  int(u.get('monthly_norm', 160) or 160),
         })
     # Тестовые сверху, далее по ФИО
     result.sort(key=lambda x: (not x['is_test'], x['display_name'].lower()))
@@ -997,6 +1008,13 @@ def admin_employee_add():
     if any(u.get('username', '').lower() == username.lower() for u in users.values()):
         return jsonify({'error': 'Такой ник уже существует'}), 400
 
+    try:
+        monthly_norm = int(data.get('monthly_norm', 160) or 160)
+        if monthly_norm < 0 or monthly_norm > 744:
+            monthly_norm = 160
+    except (ValueError, TypeError):
+        monthly_norm = 160
+
     new_id = _gen_unique_user_id(users)
     users[new_id] = {
         'username':      username,
@@ -1007,6 +1025,7 @@ def admin_employee_add():
         'pin_hash':      None,
         'invite_code':   None,
         'invite_used':   False,
+        'monthly_norm':  monthly_norm,
     }
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
@@ -1074,6 +1093,28 @@ def admin_employee_reset():
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
     log.info(f"ADMIN_EMP_RESET | by={request.current_user.get('uid')} | uid={uid}")
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/employee/norm', methods=['POST'])
+@admin_token_required
+def admin_employee_norm():
+    """Установить месячную норму часов для сотрудника."""
+    data = request.get_json(silent=True) or {}
+    uid  = str(data.get('user_id', ''))
+    try:
+        norm = int(data.get('monthly_norm', 0))
+        if norm < 0 or norm > 744:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Некорректное значение (0–744 ч)'}), 400
+    users = load_json(USERS_FILE, {})
+    if uid not in users:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+    users[uid]['monthly_norm'] = norm
+    if not save_json(USERS_FILE, users):
+        return jsonify({'error': 'Не удалось сохранить'}), 500
+    log.info(f"ADMIN_EMP_NORM | by={request.current_user.get('uid')} | uid={uid} | norm={norm}")
     return jsonify({'success': True})
 
 
