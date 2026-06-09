@@ -1781,13 +1781,15 @@ function renderStats() {
     const pct      = Math.min(100, Math.round((mh / norm) * 100));
     const over     = mh > norm ? Math.round((mh - norm) * 10) / 10 : 0;
     const monthName = new Date().toLocaleString('ru', { month: 'long', year: 'numeric' });
+    const schedNames = {'5/2':'5/2','2/2A':'2/2 смена А','2/2B':'2/2 смена Б'};
+    const schedStr = S.schedule ? ` · ${schedNames[S.schedule]||S.schedule}` : '';
     const numsHtml = over > 0
       ? `${mh} / ${norm} ч <span style="color:var(--success,#22c55e)">+${over}</span>`
       : `${mh} / ${norm} ч`;
     progressHtml = `
       <div class="month-progress">
         <div class="month-prog-head">
-          <span class="month-prog-title">Норма за ${monthName}</span>
+          <span class="month-prog-title">Норма за ${monthName}${schedStr}</span>
           <span class="month-prog-nums">${numsHtml}</span>
         </div>
         <div class="month-bar-bg">
@@ -1980,7 +1982,9 @@ async function renderAdminAccess() {
             : '<span style="color:var(--success)">(активен)</span>'}</div>`
       : `<div class="acc-code acc-code-none">Код не выдан</div>`;
     const nm = (e.display_name||'').replace(/'/g,"\\'");
-    const normLabel = e.is_test ? '' : `<div style="font-size:12px;color:var(--muted);margin:4px 0">Норма: <b>${e.monthly_norm} ч/мес</b></div>`;
+    const scheduleNames = {'5/2':'5/2','2/2A':'2/2 смена А','2/2B':'2/2 смена Б'};
+    const schedLabel = e.schedule ? scheduleNames[e.schedule] || e.schedule : '';
+    const normLabel = e.is_test ? '' : `<div style="font-size:12px;color:var(--muted);margin:4px 0">${schedLabel ? `Расписание: <b>${schedLabel}</b> · ` : ''}Норма: <b>${e.monthly_norm} ч/мес</b></div>`;
     return `
       <div class="emp-card">
         <div class="emp-head">
@@ -1993,7 +1997,7 @@ async function renderAdminAccess() {
         <div class="acc-actions">
           <button class="act-btn" onclick="accGenCode('${e.id}')">Выдать код</button>
           <button class="act-btn" onclick="accReset('${e.id}','${nm}')">Сброс пароля</button>
-          ${e.is_test ? '' : `<button class="act-btn" onclick="accSetNorm('${e.id}',${e.monthly_norm})">Норма</button>`}
+          ${e.is_test ? '' : `<button class="act-btn" onclick="accSetSchedule('${e.id}','${e.schedule||''}',${e.monthly_norm})">Расписание</button>`}
           ${e.is_admin ? '' : `<button class="act-btn del" onclick="accDelete('${e.id}','${nm}')">Удалить</button>`}
         </div>
       </div>`;
@@ -2035,39 +2039,58 @@ function accShowCode(code) {
   document.body.appendChild(d);
 }
 
-function accSetNorm(uid, currentNorm) {
+function accSetSchedule(uid, currentSchedule, currentNorm) {
   const old = document.getElementById('_normModal'); if (old) old.remove();
   const d = document.createElement('div');
   d.id = '_normModal'; d.className = 'modal-bg open';
+  const opt = s => `<option value="${s}"${currentSchedule===s?' selected':''}>${{'5/2':'5/2','2/2A':'2/2 смена А','2/2B':'2/2 смена Б'}[s]}</option>`;
   d.innerHTML = `
     <div class="modal">
       <div class="modal-head">
-        <span class="modal-title">Норма часов в месяц</span>
+        <span class="modal-title">Расписание сотрудника</span>
         <button class="modal-close" onclick="document.getElementById('_normModal').remove()">✕</button>
       </div>
       <div class="field">
+        <label class="field-label">Тип расписания</label>
+        <select class="field-input" id="schedSelect" onchange="accScheduleChange()">
+          <option value=""${!currentSchedule?' selected':''}>— своя норма —</option>
+          ${opt('5/2')}${opt('2/2A')}${opt('2/2B')}
+        </select>
+      </div>
+      <div class="field" id="customNormField" style="${currentSchedule?'display:none':''}">
         <label class="field-label">Часов в месяц (0–744)</label>
         <input type="number" class="field-input" id="normInput" value="${currentNorm}" min="0" max="744" step="1">
       </div>
-      <button class="btn btn-primary" onclick="accSubmitNorm('${uid}')">Сохранить</button>
+      <button class="btn btn-primary" onclick="accSubmitSchedule('${uid}')">Сохранить</button>
     </div>`;
   document.body.appendChild(d);
   d.addEventListener('click', ev => { if (ev.target === d) d.remove(); });
-  document.getElementById('normInput').focus();
 }
 
-async function accSubmitNorm(uid) {
-  const val = parseInt(document.getElementById('normInput').value);
-  if (isNaN(val) || val < 0 || val > 744) { toast('Введите число от 0 до 744','err'); return; }
+function accScheduleChange() {
+  const sel = document.getElementById('schedSelect').value;
+  document.getElementById('customNormField').style.display = sel ? 'none' : '';
+}
+
+async function accSubmitSchedule(uid) {
+  const schedule = document.getElementById('schedSelect').value;
+  let body;
+  if (schedule) {
+    body = {user_id: uid, schedule};
+  } else {
+    const val = parseInt(document.getElementById('normInput').value);
+    if (isNaN(val) || val < 0 || val > 744) { toast('Введите число от 0 до 744','err'); return; }
+    body = {user_id: uid, schedule: '', monthly_norm: val};
+  }
   try {
-    const resp = await fetch('/api/admin/employee/norm', {
+    const resp = await fetch('/api/admin/employee/schedule', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
-      body: JSON.stringify({user_id: uid, monthly_norm: val})
+      body: JSON.stringify(body)
     });
     if (!resp.ok) throw new Error((await resp.json()).error||'');
     document.getElementById('_normModal')?.remove();
-    toast('Норма обновлена','ok');
+    toast('Расписание обновлено','ok');
     renderAdminAccess();
   } catch(e) { toast('Ошибка: '+(e.message||'не удалось'),'err'); }
 }
@@ -2122,7 +2145,16 @@ function accAddEmployee() {
         <input type="text" class="field-input" id="newEmpUsername" placeholder="ivanov" maxlength="40">
       </div>
       <div class="field">
-        <label class="field-label">Норма часов в месяц</label>
+        <label class="field-label">Расписание</label>
+        <select class="field-input" id="newEmpSchedule" onchange="addEmpScheduleChange()">
+          <option value="5/2">5/2</option>
+          <option value="2/2A">2/2 смена А</option>
+          <option value="2/2B">2/2 смена Б</option>
+          <option value="">— своя норма —</option>
+        </select>
+      </div>
+      <div class="field" id="addEmpNormField" style="display:none">
+        <label class="field-label">Часов в месяц (0–744)</label>
         <input type="number" class="field-input" id="newEmpNorm" value="160" min="0" max="744" step="1">
       </div>
       <button class="btn btn-primary" onclick="accSubmitAddEmployee()">Создать</button>
@@ -2131,17 +2163,26 @@ function accAddEmployee() {
   d.addEventListener('click', ev => { if (ev.target === d) d.remove(); });
 }
 
+function addEmpScheduleChange() {
+  const sel = document.getElementById('newEmpSchedule').value;
+  document.getElementById('addEmpNormField').style.display = sel ? 'none' : '';
+}
+
 async function accSubmitAddEmployee() {
-  const name  = document.getElementById('newEmpName').value.trim();
-  const uname = document.getElementById('newEmpUsername').value.trim();
-  const norm  = parseInt(document.getElementById('newEmpNorm').value) || 160;
+  const name     = document.getElementById('newEmpName').value.trim();
+  const uname    = document.getElementById('newEmpUsername').value.trim();
+  const schedule = document.getElementById('newEmpSchedule').value;
+  const norm     = parseInt(document.getElementById('newEmpNorm')?.value) || 160;
   if (!name)  { toast('Введите ФИО','err'); return; }
   if (!uname) { toast('Введите ник','err'); return; }
+  const payload = {display_name: name, username: uname};
+  if (schedule) payload.schedule = schedule;
+  else payload.monthly_norm = norm;
   try {
     const resp = await fetch('/api/admin/employee/add', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
-      body: JSON.stringify({display_name: name, username: uname, monthly_norm: norm})
+      body: JSON.stringify(payload)
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error||'');
@@ -2978,6 +3019,7 @@ async function init() {
     S.adminStats      = data.admin_stats||null;
     S.userAssignments = data.user_assignments||{};
     S.monthly_norm    = data.monthly_norm || 160;
+    S.schedule        = data.schedule || '';
     // Имя в интерфейсе — ВСЕГДА display_name из ответа сервера (единый источник)
     const displayName = data.display_name || S.username || localStorage.getItem('phm_display') || '';
     if (displayName) localStorage.setItem('phm_display', displayName);

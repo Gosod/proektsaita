@@ -128,6 +128,35 @@ def gen_invite_code(length: int = 4) -> str:
     """Персональный одноразовый код (латиница+цифры, без 0/O, 1/I)."""
     return ''.join(secrets.choice(INVITE_ALPHABET) for _ in range(length))
 
+# ── НОРМЫ РАБОЧИХ ЧАСОВ ПО РАСПИСАНИЯМ ───────────────
+MONTHLY_NORMS: dict[str, dict[str, int]] = {
+    '5/2': {
+        '2026-01': 120, '2026-02': 152, '2026-03': 168,
+        '2026-04': 176, '2026-05': 152, '2026-06': 168,
+        '2026-07': 184, '2026-08': 168, '2026-09': 176,
+        '2026-10': 176, '2026-11': 160, '2026-12': 176,
+    },
+    '2/2A': {
+        '2026-01': 144, '2026-02': 156, '2026-03': 180,
+        '2026-04': 180, '2026-05': 180, '2026-06': 168,
+        '2026-07': 192, '2026-08': 180, '2026-09': 180,
+        '2026-10': 192, '2026-11': 168, '2026-12': 180,
+    },
+    '2/2B': {
+        '2026-01': 132, '2026-02': 168, '2026-03': 180,
+        '2026-04': 180, '2026-05': 168, '2026-06': 180,
+        '2026-07': 180, '2026-08': 192, '2026-09': 180,
+        '2026-10': 180, '2026-11': 180, '2026-12': 180,
+    },
+}
+VALID_SCHEDULES = set(MONTHLY_NORMS.keys())
+
+def get_monthly_norm(user_record: dict, year_month: str) -> int:
+    schedule = user_record.get('schedule', '')
+    if schedule in MONTHLY_NORMS:
+        return MONTHLY_NORMS[schedule].get(year_month, 160)
+    return int(user_record.get('monthly_norm', 160) or 160)
+
 # ══════════════════════════════════════════════════════
 # ЛОГИРОВАНИЕ
 # ══════════════════════════════════════════════════════
@@ -591,7 +620,8 @@ def init_data():
         'display_name': _urec.get('display_name', _urec.get('username', '')),
         'projects':     user_projects,
         'user_stats':   user_stats,
-        'monthly_norm': int(_urec.get('monthly_norm', 160) or 160),
+        'monthly_norm': get_monthly_norm(_urec, msk_now().strftime('%Y-%m')),
+        'schedule':     _urec.get('schedule', ''),
     }
 
     if is_admin(user_id):
@@ -983,7 +1013,8 @@ def admin_employees():
             'invite_used':   bool(u.get('invite_used', False)),
             'is_test':       bool(u.get('is_test', False)),
             'is_admin':      is_admin(uid),
-            'monthly_norm':  int(u.get('monthly_norm', 160) or 160),
+            'monthly_norm':  get_monthly_norm(u, msk_now().strftime('%Y-%m')),
+            'schedule':      u.get('schedule', ''),
         })
     # Тестовые сверху, далее по ФИО
     result.sort(key=lambda x: (not x['is_test'], x['display_name'].lower()))
@@ -1004,6 +1035,10 @@ def admin_employee_add():
     if any(u.get('username', '').lower() == username.lower() for u in users.values()):
         return jsonify({'error': 'Такой ник уже существует'}), 400
 
+    schedule = str(data.get('schedule', '')).strip()
+    if schedule not in VALID_SCHEDULES:
+        schedule = ''
+
     try:
         monthly_norm = int(data.get('monthly_norm', 160) or 160)
         if monthly_norm < 0 or monthly_norm > 744:
@@ -1012,7 +1047,7 @@ def admin_employee_add():
         monthly_norm = 160
 
     new_id = _gen_unique_user_id(users)
-    users[new_id] = {
+    rec = {
         'username':      username,
         'display_name':  display_name,
         'registered_at': '',
@@ -1021,8 +1056,12 @@ def admin_employee_add():
         'pin_hash':      None,
         'invite_code':   None,
         'invite_used':   False,
-        'monthly_norm':  monthly_norm,
     }
+    if schedule:
+        rec['schedule'] = schedule
+    else:
+        rec['monthly_norm'] = monthly_norm
+    users[new_id] = rec
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
     log.info(f"ADMIN_EMP_ADD | by={request.current_user.get('uid')} | new_id={new_id} | username={username}")
@@ -1111,6 +1150,30 @@ def admin_employee_norm():
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
     log.info(f"ADMIN_EMP_NORM | by={request.current_user.get('uid')} | uid={uid} | norm={norm}")
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/employee/schedule', methods=['POST'])
+@admin_token_required
+def admin_employee_schedule():
+    """Установить тип расписания сотрудника (5/2, 2/2A, 2/2B) или сбросить."""
+    data     = request.get_json(silent=True) or {}
+    uid      = str(data.get('user_id', ''))
+    schedule = str(data.get('schedule', '')).strip()
+    if schedule and schedule not in VALID_SCHEDULES:
+        return jsonify({'error': 'Неверный тип расписания'}), 400
+    users = load_json(USERS_FILE, {})
+    if uid not in users:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+    if schedule:
+        users[uid]['schedule'] = schedule
+        users[uid].pop('monthly_norm', None)
+    else:
+        users[uid].pop('schedule', None)
+        users[uid]['monthly_norm'] = int(data.get('monthly_norm', 160) or 160)
+    if not save_json(USERS_FILE, users):
+        return jsonify({'error': 'Не удалось сохранить'}), 500
+    log.info(f"ADMIN_EMP_SCHED | by={request.current_user.get('uid')} | uid={uid} | schedule={schedule}")
     return jsonify({'success': True})
 
 

@@ -12,8 +12,10 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 USERS_FILE = os.path.join(BASE_DIR, 'users.json')
 
 TEST_ACCOUNTS = [
-    {'uid': '100000001', 'code': 'TEST',    'display': 'ТЕСТ Тестовый',       'norm': 160},
-    {'uid': '100000002', 'code': 'TESTADM', 'display': 'ТЕСТ Администратор',  'norm': 0},
+    {'uid': '100000001', 'code': 'TEST',    'display': 'ТЕСТ Тестовый',      'schedule': '5/2'},
+    {'uid': '100000002', 'code': 'TESTADM', 'display': 'ТЕСТ Администратор', 'norm': 0},
+    {'uid': '100000003', 'code': 'TESTA',   'display': 'ТЕСТ Смена А',       'schedule': '2/2A'},
+    {'uid': '100000004', 'code': 'TESTB',   'display': 'ТЕСТ Смена Б',       'schedule': '2/2B'},
 ]
 
 
@@ -34,7 +36,12 @@ def main():
         u['registered_at'] = ''
         u['status']        = 'active'
         u['is_test']       = True
-        u['monthly_norm']  = acc['norm']
+        if 'schedule' in acc:
+            u['schedule'] = acc['schedule']
+            u.pop('monthly_norm', None)
+        else:
+            u.pop('schedule', None)
+            u['monthly_norm'] = acc['norm']
         print(f'✅ {acc["display"]} (id {uid}) — сброшен, код: {acc["code"]}')
 
     with open(USERS_FILE, 'w', encoding='utf-8') as f:
