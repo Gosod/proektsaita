@@ -101,7 +101,7 @@ input,textarea,select { font-family:var(--font); }
 }.topbar-logo { display:flex; align-items:center; flex-shrink:0; }
 .topbar-logo svg { height:20px; width:auto; }
 .topbar-sep { width:1px; height:18px; background:var(--border); flex-shrink:0; }
-.topbar-name { font-size:13px; font-weight:600; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-name { font-size:13px; font-weight:600; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; user-select:none; -webkit-user-select:none; }
 .topbar-badge {
   font-size:11px; font-weight:600; padding:3px 9px;
   border-radius:20px; background:var(--blue-lt); color:var(--blue);
@@ -259,8 +259,8 @@ input,textarea,select { font-family:var(--font); }
 
 /* ─── SECTION HEAD ───────────────────────────────── */
 .sec-head { margin-bottom:16px; }
-.sec-title { font-size:18px; font-weight:700; letter-spacing:-.3px; }
-.sec-sub { font-size:13px; color:var(--muted); margin-top:2px; }
+.sec-title { font-size:18px; font-weight:700; letter-spacing:-.3px; user-select:none; -webkit-user-select:none; }
+.sec-sub { font-size:13px; color:var(--muted); margin-top:2px; user-select:none; -webkit-user-select:none; }
 
 /* ─── CARD ───────────────────────────────────────── */
 .card {
@@ -292,6 +292,7 @@ input,textarea,select { font-family:var(--font); }
   background:var(--blue); border-radius:var(--r);
   padding:14px 16px; margin-bottom:16px;
   display:flex; align-items:center; gap:12px;
+  user-select:none; -webkit-user-select:none;
 }
 .today-dot { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.5); flex-shrink:0; }
 .today-text { font-size:13px; font-weight:500; color:#fff; }
@@ -545,7 +546,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .month-progress {
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--r); padding:14px 16px; margin-bottom:12px;
-  box-shadow:var(--shadow);
+  box-shadow:var(--shadow); user-select:none; -webkit-user-select:none;
 }
 .month-prog-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
 .month-prog-title { font-size:13px; font-weight:600; color:var(--text); }
@@ -584,13 +585,14 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .ts-vac-cell { color:var(--blue); font-style:italic; }
 .ts-lunch-row td { background:rgba(100,100,100,.05) !important; }
 .ts-lunch-cell { color:var(--muted); font-style:italic; }
-.ts-norm-hint { font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; }
+.ts-norm-hint { font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; user-select:none; -webkit-user-select:none; }
 
 /* ─── STATS ──────────────────────────────────────── */
 .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
 .stat-tile {
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--r); padding:16px; box-shadow:var(--shadow);
+  user-select:none; -webkit-user-select:none;
 }
 .stat-val { font-size:28px; font-weight:700; color:var(--blue); line-height:1; }
 .stat-lbl { font-size:12px; color:var(--muted); margin-top:4px; }
@@ -600,6 +602,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   padding:11px 14px; background:var(--surface);
   border:1px solid var(--border); border-radius:var(--r);
   margin-bottom:6px; box-shadow:var(--shadow);
+  user-select:none; -webkit-user-select:none;
 }
 .proj-stat-name { font-size:13px; }
 .proj-stat-hrs { font-size:14px; font-weight:700; color:var(--blue); }
@@ -620,6 +623,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .emp-card {
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--r); padding:14px 16px; margin-bottom:8px; box-shadow:var(--shadow);
+  user-select:none; -webkit-user-select:none;
 }
 .emp-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .emp-name { font-size:14px; font-weight:700; }
@@ -633,7 +637,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .acc-badge-ok   { background:rgba(22,163,74,.14); color:var(--success); }
 .acc-badge-no   { background:var(--bg); color:var(--muted); border:1px solid var(--border); }
 .acc-badge-test { background:var(--blue-lt); color:var(--blue); margin-left:6px; }
-.acc-code { font-size:13px; margin:6px 0 2px; }
+.acc-code { font-size:13px; margin:6px 0 2px; user-select:text; -webkit-user-select:text; }
 .acc-code-none { color:var(--muted); }
 .acc-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
 
@@ -721,6 +725,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   border-radius:0 var(--r) var(--r) 0;
   padding:10px 12px; font-size:12px; line-height:1.6;
   margin-bottom:16px; color:var(--text);
+  user-select:none; -webkit-user-select:none;
 }
 
 /* ─── EMPTY ──────────────────────────────────────── */
@@ -3133,7 +3138,8 @@ let _authBusy = false;
 
 async function loadUserList() {
   try {
-    const resp = await fetch('/api/auth/users');
+    const testMode = new URLSearchParams(window.location.search).has('test');
+    const resp = await fetch('/api/auth/users' + (testMode ? '?show_test=1' : ''));
     const data = await resp.json();
     const users = data.users || [];
     ['regUserId','loginUserId'].forEach(selId => {

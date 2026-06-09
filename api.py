@@ -448,9 +448,12 @@ def health():
 @app.route('/api/auth/users', methods=['GET'])
 def get_user_list():
     """Список сотрудников для выпадающего списка при регистрации."""
+    show_test = request.args.get('show_test') == '1'
     users = load_json(USERS_FILE, {})
     result = []
     for uid, udata in users.items():
+        if udata.get('is_test') and not show_test:
+            continue
         result.append({
             'id':           uid,
             'username':     udata.get('username', ''),
