@@ -1334,6 +1334,8 @@ async function loadData() {
   S.userStats   = data.user_stats || {};
   S.adminStats  = data.admin_stats || null;
   S.userAssignments = data.user_assignments || {};
+  S.monthly_norm    = data.monthly_norm || 160;
+  S.schedule        = data.schedule || '';
 
   // Имя в интерфейсе — display_name из ответа сервера (единый источник)
   const display = data.display_name || S.username || localStorage.getItem('phm_display') || 'Пользователь';

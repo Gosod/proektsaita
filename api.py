@@ -796,59 +796,6 @@ def submit_report_pwa():
     return jsonify({'success': True, 'saved': len(saved), 'sheets_errors': errors})
 
 
-
-    data    = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-
-    # Обычный пользователь — отклоняем (пишет бот напрямую)
-    on_behalf = data.get('on_behalf_of_user_id')
-    if on_behalf and not is_admin(user_id):
-        return jsonify({'error': 'Forbidden'}), 403
-    if not on_behalf and not is_admin(user_id):
-        return jsonify({'error': 'Use bot to submit reports'}), 400
-
-    report_user_id   = on_behalf or user_id
-    report_username  = data.get('on_behalf_of_username') or \
-                       load_json(USERS_FILE, {}).get(str(report_user_id), {}).get('username', '?')
-
-    projects    = data.get('projects', [])
-    general_cmt = data.get('comments', '-')
-    custom_date = data.get('custom_date')
-
-    if not projects:
-        return jsonify({'error': 'projects required'}), 400
-
-    if custom_date:
-        try:
-            dt = MSK.localize(datetime.strptime(custom_date, '%Y-%m-%d'))
-        except Exception:
-            dt = msk_now()
-    else:
-        dt = msk_now()
-
-    saved = []
-    errors = 0
-    for item in projects:
-        proj_cmt = item.get('comment', '').strip()
-        report = {
-            'id':       gen_id(),
-            'user_id':  int(report_user_id),
-            'username': report_username,
-            'project':  item.get('project', '?'),
-            'hours':    float(item.get('hours', 0)),
-            'comments': proj_cmt or general_cmt,
-            'date':     dt.strftime('%Y-%m-%d'),
-            'datetime': dt.strftime('%Y-%m-%d %H:%M:%S'),
-        }
-        ok = sheets_append(report)
-        if not ok:
-            errors += 1
-        saved.append(report)
-
-    log.info(f"ADMIN_REPORT | admin={user_id} | for={report_username} | items={len(saved)} | sheets_errors={errors}")
-    return jsonify({'success': True, 'saved': len(saved), 'sheets_errors': errors})
-
-
 # ── GET REPORTS ────────────────────────────────────────
 @app.route('/api/user/timesheet', methods=['GET'])
 @auth_required
@@ -1341,5 +1288,7 @@ if __name__ == '__main__':
     log.info("══ API запущен ══════════════════════════")
     log.info(f"Sheets ID: {SPREADSHEET_ID or '⚠️  НЕ ЗАДАН'}")
     log.info(f"Admins:    {ADMIN_IDS}")
+    if JWT_SECRET == 'phm-secret-change-me-in-production':
+        log.warning("⚠️  JWT_SECRET использует дефолт — задайте переменную окружения в проде!")
     log.info("═════════════════════════════════════════")
     app.run(host='0.0.0.0', port=5000, debug=False)
