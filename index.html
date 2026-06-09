@@ -1955,7 +1955,7 @@ function buildTimesheetTable(data) {
     <tr class="ts-vac-row">
       <td class="ts-proj-cell ts-vac-cell">Отпуск</td>
       ${days.map(d => `<td${wkCls(d)}>${vacSet.has(d) ? 'О' : ''}</td>`).join('')}
-      <td class="ts-total-col">${vacSet.size}</td>
+      <td class="ts-total-col"></td>
     </tr>` : '';
 
   const totCells = days.map(d => `<td${wkCls(d)}>${totByDay[d] || ''}</td>`).join('');
