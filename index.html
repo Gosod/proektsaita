@@ -115,6 +115,15 @@ input,textarea,select { font-family:var(--font); }
 }
 .theme-toggle:active { transform:scale(.9); }
 .theme-icon { font-size:16px; line-height:1; display:block; transition: transform .4s var(--ease); }
+.logout-btn {
+  flex-shrink:0; width:34px; height:34px;
+  border:1px solid var(--border); border-radius:50%;
+  background:var(--bg); display:flex; align-items:center; justify-content:center;
+  transition: background .2s, border-color .2s, transform .15s; cursor:pointer;
+  color:var(--muted); font-size:16px; line-height:1;
+}
+.logout-btn:active { transform:scale(.9); }
+.logout-btn:hover { border-color:var(--red,#e53935); color:var(--red,#e53935); }
 
 /* ─── TABS ───────────────────────────────────────── */
 .tabs {
@@ -181,30 +190,6 @@ input,textarea,select { font-family:var(--font); }
   font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4;
 }
 
-/* PIN экран */
-.pin-display {
-  display: flex; gap: 14px; justify-content: center;
-  margin-bottom: 28px;
-}
-.pin-dot {
-  width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid var(--border); background: var(--bg);
-  transition: all .15s;
-}
-.pin-dot.filled { background: var(--blue); border-color: var(--blue); }
-.pin-pad {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
-}
-.pin-btn {
-  padding: 16px; border: 1.5px solid var(--border);
-  border-radius: var(--r); font: 700 20px var(--font);
-  background: var(--surface); color: var(--text);
-  cursor: pointer; text-align: center;
-  transition: all .12s; user-select: none;
-}
-.pin-btn:active { background: var(--blue-lt); border-color: var(--blue); transform: scale(.95); }
-.pin-btn.del { font-size: 18px; color: var(--muted); }
-.pin-btn.empty { border: none; background: transparent; pointer-events: none; }
 
 /* ─── OVERVIEW ACCORDION ─────────────────────────── */
 .ov-acc { margin-top: 12px; }
@@ -883,64 +868,6 @@ input[type="range"]::-moz-range-thumb {
   </div>
 </div>
 
-<!-- ═══ ЭКРАН: УСТАНОВКА PIN ═══ -->
-<div class="auth-screen hidden" id="screenSetPin">
-  <div class="auth-card">
-    <div class="auth-title">Установите PIN</div>
-    <div class="auth-sub" id="setPinSub">Придумайте 4-значный PIN для быстрого входа</div>
-    <div class="pin-display" id="setPinDisplay">
-      <div class="pin-dot" id="spd0"></div>
-      <div class="pin-dot" id="spd1"></div>
-      <div class="pin-dot" id="spd2"></div>
-      <div class="pin-dot" id="spd3"></div>
-    </div>
-    <div class="auth-err" id="setPinErr"></div>
-    <div class="pin-pad">
-      <button class="pin-btn" onclick="pinPad('set','1')">1</button>
-      <button class="pin-btn" onclick="pinPad('set','2')">2</button>
-      <button class="pin-btn" onclick="pinPad('set','3')">3</button>
-      <button class="pin-btn" onclick="pinPad('set','4')">4</button>
-      <button class="pin-btn" onclick="pinPad('set','5')">5</button>
-      <button class="pin-btn" onclick="pinPad('set','6')">6</button>
-      <button class="pin-btn" onclick="pinPad('set','7')">7</button>
-      <button class="pin-btn" onclick="pinPad('set','8')">8</button>
-      <button class="pin-btn" onclick="pinPad('set','9')">9</button>
-      <button class="pin-btn empty"></button>
-      <button class="pin-btn" onclick="pinPad('set','0')">0</button>
-      <button class="pin-btn del" onclick="pinPad('set','del')">⌫</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ ЭКРАН: ВХОД ПО PIN ═══ -->
-<div class="auth-screen hidden" id="screenPin">
-  <div class="auth-card">
-    <div class="auth-title" id="pinGreet">Добрый день</div>
-    <div class="auth-sub" id="pinName">Введите PIN</div>
-    <div class="pin-display" id="pinDisplay">
-      <div class="pin-dot" id="pd0"></div>
-      <div class="pin-dot" id="pd1"></div>
-      <div class="pin-dot" id="pd2"></div>
-      <div class="pin-dot" id="pd3"></div>
-    </div>
-    <div class="auth-err" id="pinErr"></div>
-    <div class="pin-pad">
-      <button class="pin-btn" onclick="pinPad('enter','1')">1</button>
-      <button class="pin-btn" onclick="pinPad('enter','2')">2</button>
-      <button class="pin-btn" onclick="pinPad('enter','3')">3</button>
-      <button class="pin-btn" onclick="pinPad('enter','4')">4</button>
-      <button class="pin-btn" onclick="pinPad('enter','5')">5</button>
-      <button class="pin-btn" onclick="pinPad('enter','6')">6</button>
-      <button class="pin-btn" onclick="pinPad('enter','7')">7</button>
-      <button class="pin-btn" onclick="pinPad('enter','8')">8</button>
-      <button class="pin-btn" onclick="pinPad('enter','9')">9</button>
-      <button class="pin-btn empty"></button>
-      <button class="pin-btn" onclick="pinPad('enter','0')">0</button>
-      <button class="pin-btn del" onclick="pinPad('enter','del')">⌫</button>
-    </div>
-    <span class="auth-link" onclick="showLogin()">Забыл PIN</span>
-  </div>
-</div>
 
 <!-- TOPBAR -->
 <div class="topbar" id="topbar" style="display:none">
@@ -967,6 +894,7 @@ input[type="range"]::-moz-range-thumb {
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme(event)" aria-label="Сменить тему">
     <span class="theme-icon">☀️</span>
   </button>
+  <button class="logout-btn" onclick="doLogout()" title="Выйти" aria-label="Выйти">⏻</button>
 </div>
 
 <!-- TABS -->
@@ -2756,10 +2684,7 @@ const AUTH = {
   token:    localStorage.getItem('phm_token'),
   userId:   localStorage.getItem('phm_uid'),
   username: localStorage.getItem('phm_uname'),
-  pinSet:   localStorage.getItem('phm_pin_set') === '1',
 };
-
-let pinBuffer = { set: '', enter: '', step: 'first', first: '' };
 
 function saveAuth(data) {
   AUTH.token    = data.token;
@@ -2773,31 +2698,22 @@ function saveAuth(data) {
 function clearAuth() {
   ['phm_token','phm_uid','phm_uname','phm_pin_set','phm_display'].forEach(k => localStorage.removeItem(k));
   AUTH.token = AUTH.userId = AUTH.username = null;
-  AUTH.pinSet = false;
+}
+
+function doLogout() {
+  clearAuth();
+  document.getElementById('topbar').style.display = 'none';
+  document.getElementById('tabsEl').style.display  = 'none';
+  checkAuth();
 }
 
 function hideAllAuth() {
-  ['screenRegister','screenLogin','screenSetPin','screenPin'].forEach(id => {
+  ['screenRegister','screenLogin'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
 }
 function showRegister() { hideAllAuth(); document.getElementById('screenRegister').classList.remove('hidden'); }
 function showLogin()    { hideAllAuth(); document.getElementById('screenLogin').classList.remove('hidden'); }
-function showSetPin()   {
-  hideAllAuth();
-  pinBuffer = { set:'', enter:'', step:'first', first:'' };
-  document.getElementById('setPinSub').textContent = 'Придумайте 4-значный PIN для быстрого входа';
-  updatePinDisplay('set');
-  document.getElementById('screenSetPin').classList.remove('hidden');
-}
-function showPinEntry() {
-  hideAllAuth();
-  const hr = new Date().getHours();
-  document.getElementById('pinGreet').textContent = hr<6?'Доброй ночи':hr<12?'Доброе утро':hr<18?'Добрый день':'Добрый вечер';
-  document.getElementById('pinName').textContent  = localStorage.getItem('phm_display') || 'Введите PIN';
-  pinBuffer.enter = ''; updatePinDisplay('enter');
-  document.getElementById('screenPin').classList.remove('hidden');
-}
 
 async function loadUserList() {
   try {
@@ -2887,7 +2803,7 @@ async function doRegister() {
     }
     saveAuth(data);
     localStorage.setItem('phm_display', data.display_name || sel.selectedOptions[0]?.textContent||'');
-    showSetPin();
+    init();
   } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); }
 }
 
@@ -2907,83 +2823,13 @@ async function doLogin() {
     if (!resp.ok) { err.textContent=data.error||'Ошибка'; err.classList.add('show'); return; }
     saveAuth(data);
     localStorage.setItem('phm_display', data.display_name || document.getElementById('loginUserId').selectedOptions[0]?.textContent||'');
-    localStorage.removeItem('phm_pin_set');
-    AUTH.pinSet = false;
-    showSetPin();
+    init();
   } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); }
-}
-
-function updatePinDisplay(mode) {
-  const val    = mode==='set' ? pinBuffer.set : pinBuffer.enter;
-  const prefix = mode==='set' ? 'spd' : 'pd';
-  for (let i=0; i<4; i++) {
-    document.getElementById(`${prefix}${i}`)?.classList.toggle('filled', i < val.length);
-  }
-}
-
-async function pinPad(mode, key) {
-  haptic('light');
-  if (mode === 'set') {
-    const err = document.getElementById('setPinErr');
-    err.classList.remove('show');
-    if (key==='del') { pinBuffer.set=pinBuffer.set.slice(0,-1); updatePinDisplay('set'); return; }
-    if (pinBuffer.set.length>=4) return;
-    pinBuffer.set += key;
-    updatePinDisplay('set');
-    if (pinBuffer.set.length===4) {
-      if (pinBuffer.step==='first') {
-        pinBuffer.first = pinBuffer.set; pinBuffer.set=''; pinBuffer.step='confirm';
-        document.getElementById('setPinSub').textContent='Повторите PIN для подтверждения';
-        updatePinDisplay('set');
-      } else {
-        if (pinBuffer.set !== pinBuffer.first) {
-          err.textContent='PIN не совпадает, попробуйте снова'; err.classList.add('show');
-          pinBuffer.set=''; pinBuffer.step='first'; pinBuffer.first='';
-          document.getElementById('setPinSub').textContent='Придумайте 4-значный PIN для быстрого входа';
-          updatePinDisplay('set'); return;
-        }
-        try {
-          const resp = await fetch('/api/auth/set-pin', {
-            method:'POST',
-            headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
-            body: JSON.stringify({pin: pinBuffer.set})
-          });
-          if (resp.ok) {
-            localStorage.setItem('phm_pin_set','1'); AUTH.pinSet=true;
-            hapticNotif('success'); hideAllAuth(); await init();
-          } else { err.textContent='Ошибка сохранения PIN'; err.classList.add('show'); }
-        } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); }
-      }
-    }
-  } else {
-    const err = document.getElementById('pinErr');
-    err.classList.remove('show');
-    if (key==='del') { pinBuffer.enter=pinBuffer.enter.slice(0,-1); updatePinDisplay('enter'); return; }
-    if (pinBuffer.enter.length>=4) return;
-    pinBuffer.enter += key;
-    updatePinDisplay('enter');
-    if (pinBuffer.enter.length===4) {
-      try {
-        const resp = await fetch('/api/auth/verify-pin', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({user_id: AUTH.userId, pin: pinBuffer.enter})
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          saveAuth(data); hapticNotif('success'); hideAllAuth(); await init();
-        } else {
-          hapticNotif('error'); err.textContent='Неверный PIN'; err.classList.add('show');
-          pinBuffer.enter=''; updatePinDisplay('enter');
-        }
-      } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); pinBuffer.enter=''; updatePinDisplay('enter'); }
-    }
-  }
 }
 
 async function checkAuth() {
   await loadUserList();
   if (!AUTH.token || !AUTH.userId) { showRegister(); return; }
-  if (AUTH.pinSet) { showPinEntry(); return; }
   showLogin();
 }
 
