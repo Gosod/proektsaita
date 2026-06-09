@@ -145,32 +145,28 @@ app = Flask(__name__)
 CORS(app)
 
 # ── Локальная отдача статики (index.html / manifest.json) ──
-# На боевом этим занимается nginx, поэтому включается только флагом SERVE_STATIC=1.
-# Так локально можно открыть http://localhost:5000/ без отдельного веб-сервера.
-if os.environ.get('SERVE_STATIC') == '1':
-    from flask import send_from_directory
+from flask import send_from_directory
 
-    @app.route('/')
-    @app.route('/app.html')
-    def _serve_index():
-        return send_from_directory(BASE_DIR, 'index.html')
+@app.route('/')
+@app.route('/app.html')
+def _serve_index():
+    return send_from_directory(BASE_DIR, 'index.html')
 
-    @app.route('/manifest.json')
-    def _serve_manifest():
-        return send_from_directory(BASE_DIR, 'manifest.json')
+@app.route('/manifest.json')
+def _serve_manifest():
+    return send_from_directory(BASE_DIR, 'manifest.json')
 
-    # Необязательная статика (иконки, фон). Если файла нет — тихо 204,
-    # чтобы не засорять лог 404-ответами при локальном тесте.
-    @app.route('/favicon.ico')
-    @app.route('/bg.jpg')
-    @app.route('/icon-192.png')
-    @app.route('/icon-512.png')
-    def _serve_optional_static():
-        fname = request.path.lstrip('/')
-        fpath = os.path.join(BASE_DIR, fname)
-        if os.path.exists(fpath):
-            return send_from_directory(BASE_DIR, fname)
-        return '', 204
+# Иконки и фон — если файла нет, тихий 204 вместо 404 в логах
+@app.route('/favicon.ico')
+@app.route('/bg.jpg')
+@app.route('/icon-192.png')
+@app.route('/icon-512.png')
+def _serve_optional_static():
+    fname = request.path.lstrip('/')
+    fpath = os.path.join(BASE_DIR, fname)
+    if os.path.exists(fpath):
+        return send_from_directory(BASE_DIR, fname)
+    return '', 204
 
 # ══════════════════════════════════════════════════════
 # JSON HELPERS (атомарная запись)
