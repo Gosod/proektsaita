@@ -8,8 +8,9 @@
 import json
 import os
 
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-USERS_FILE = os.path.join(BASE_DIR, 'users.json')
+BASE_DIR          = os.path.dirname(os.path.abspath(__file__))
+USERS_FILE        = os.path.join(BASE_DIR, 'users.json')
+REPORTS_LOCAL_FILE = os.path.join(BASE_DIR, 'reports_local.json')
 
 TEST_ACCOUNTS = [
     {'uid': '100000001', 'code': 'TEST',    'display': 'ТЕСТ Тестовый',      'schedule': '5/2'},
@@ -17,6 +18,7 @@ TEST_ACCOUNTS = [
     {'uid': '100000003', 'code': 'TESTA',   'display': 'ТЕСТ Смена А',       'schedule': '2/2A'},
     {'uid': '100000004', 'code': 'TESTB',   'display': 'ТЕСТ Смена Б',       'schedule': '2/2B'},
 ]
+TEST_UIDS = {int(a['uid']) for a in TEST_ACCOUNTS}
 
 
 def main():
@@ -46,6 +48,17 @@ def main():
 
     with open(USERS_FILE, 'w', encoding='utf-8') as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
+
+    # Очищаем локальные отчёты тест-аккаунтов
+    if os.path.exists(REPORTS_LOCAL_FILE):
+        with open(REPORTS_LOCAL_FILE, 'r', encoding='utf-8') as f:
+            reports = json.load(f)
+        kept = [r for r in reports if r.get('user_id') not in TEST_UIDS]
+        with open(REPORTS_LOCAL_FILE, 'w', encoding='utf-8') as f:
+            json.dump(kept, f, ensure_ascii=False, indent=2)
+        removed = len(reports) - len(kept)
+        if removed:
+            print(f'🗑  Удалено {removed} тестовых отчётов из reports_local.json')
 
     print('\nПерезапуск сервера не нужен.')
 

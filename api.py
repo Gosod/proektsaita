@@ -41,6 +41,7 @@ USERS_FILE       = os.path.join(BASE_DIR, 'users.json')
 PROJECTS_FILE    = os.path.join(BASE_DIR, 'projects.json')
 USER_PROJECTS_FILE = os.path.join(BASE_DIR, 'user_projects.json')
 CREDENTIALS_FILE = os.path.join(BASE_DIR, 'credentials.json')
+REPORTS_LOCAL_FILE = os.path.join(BASE_DIR, 'reports_local.json')
 
 SPREADSHEET_ID   = os.environ.get('SPREADSHEET_ID', '')
 SHEET_REPORTS    = 'Отчёты'
@@ -279,6 +280,22 @@ def sheets_read_all() -> list:
     except Exception as e:
         log.error(f"SHEETS_READ_FAIL | error={e}")
         return []
+
+
+def local_reports_for_user(uid_int: int, username: str) -> list:
+    """Отчёты тестовых сотрудников, сохранённые локально."""
+    uname = username.lower()
+    return [
+        r for r in load_json(REPORTS_LOCAL_FILE, [])
+        if r.get('user_id') == uid_int or r.get('username', '').lower() == uname
+    ]
+
+
+def append_local_report(report: dict) -> None:
+    """Добавить отчёт в локальный файл (для тест-сотрудников)."""
+    records = load_json(REPORTS_LOCAL_FILE, [])
+    records.append(report)
+    save_json(REPORTS_LOCAL_FILE, records)
 
 # ══════════════════════════════════════════════════════
 # HELPERS
@@ -612,11 +629,17 @@ def init_data():
     all_projects = load_json(PROJECTS_FILE, [])
     user_projects = get_user_projects(int(user_id))
 
-    # Читаем отчёты из Sheets для всех
+    # Читаем отчёты из Sheets для всех (тест-аккаунты исключены)
     all_reports = sheets_read_all()
     all_reports = _normalize_sheets_records(all_reports, all_users)
 
-    user_stats = build_user_stats(int(user_id), all_reports, all_users)
+    # Для личной статистики добавляем локальные отчёты (тест-сотрудники)
+    _urec_pre = all_users.get(str(user_id), {})
+    local_extra = (
+        local_reports_for_user(int(user_id), _urec_pre.get('username', ''))
+        if _urec_pre.get('is_test') else []
+    )
+    user_stats = build_user_stats(int(user_id), all_reports + local_extra, all_users)
 
     _urec = all_users.get(str(user_id), {})
     resp = {
@@ -754,10 +777,11 @@ def submit_report_pwa():
             'date':     dt.strftime('%Y-%m-%d'),
             'datetime': dt.strftime('%Y-%m-%d %H:%M:%S'),
         }
-        # Тестовый сотрудник — НЕ пишем в Sheets и в статистику
+        # Тестовый сотрудник — сохраняем локально, не в Sheets
         if is_test_user:
             saved.append(report)
-            log.info(f"PWA_REPORT_TEST | uid={uid} | project={report['project']} | (Sheets пропущен)")
+            append_local_report({**report, 'user_id': int(uid)})
+            log.info(f"PWA_REPORT_TEST | uid={uid} | project={report['project']} | (локально сохранён)")
             continue
         ok = sheets_append(report)
         if not ok:
@@ -843,8 +867,14 @@ def user_timesheet():
     uname = urec.get('username', '').lower()
     prefix = f'{year:04d}-{month:02d}'
 
+    local_extra = (
+        local_reports_for_user(int(uid), uname)
+        if urec.get('is_test') else []
+    )
+    combined = all_reports + local_extra
+
     user_reports = [
-        r for r in all_reports
+        r for r in combined
         if (r.get('user_id') == int(uid) or (uname and r.get('username', '').lower() == uname))
         and r.get('date', '').startswith(prefix)
     ]
