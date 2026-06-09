@@ -898,14 +898,13 @@ def user_timesheet():
         rows.setdefault(str(day), {})
         rows[str(day)][proj] = round(rows[str(day)].get(proj, 0) + hours, 2)
 
-    # Отпускные дни за этот месяц
-    vacations  = load_json(VACATIONS_FILE, {})
-    user_vac   = vacations.get(uid, {})
-    vacation_month = {
-        str(int(d[8:10])): h
-        for d, h in user_vac.items()
+    # Отпускные дни за этот месяц (только даты, без часов — для отметки в табеле)
+    vacations     = load_json(VACATIONS_FILE, {})
+    vacation_days = sorted(
+        d[8:10].lstrip('0') or '0'   # "01" → "1"
+        for d in vacations.get(uid, {})
         if d.startswith(prefix)
-    }
+    )
 
     return jsonify({
         'year':          year,
@@ -914,7 +913,7 @@ def user_timesheet():
         'norm':          get_monthly_norm(urec, prefix),
         'projects':      sorted(projects_set),
         'rows':          rows,
-        'vacation':      vacation_month,
+        'vacation_days': vacation_days,   # ["3","10","11"] — просто список дней
     })
 
 
@@ -933,35 +932,25 @@ def admin_get_vacation():
 @app.route('/api/admin/employee/vacation', methods=['POST'])
 @admin_token_required
 def admin_set_vacation():
-    """Добавить/заменить отпускные дни (диапазон дат)."""
-    data  = request.get_json(silent=True) or {}
-    uid   = str(data.get('user_id', ''))
+    data   = request.get_json(silent=True) or {}
+    uid    = str(data.get('user_id', ''))
     d_from = str(data.get('date_from', ''))
     d_to   = str(data.get('date_to',   ''))
     try:
-        hours = float(data.get('hours', 8))
-        if hours <= 0 or hours > 24:
-            raise ValueError()
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Некорректное количество часов'}), 400
-    try:
-        from datetime import date as _date, timedelta as _td
         cur = datetime.strptime(d_from, '%Y-%m-%d').date()
         end = datetime.strptime(d_to,   '%Y-%m-%d').date()
         if end < cur:
             raise ValueError()
     except Exception:
         return jsonify({'error': 'Некорректные даты'}), 400
-
     all_users = load_json(USERS_FILE, {})
     if uid not in all_users:
         return jsonify({'error': 'Пользователь не найден'}), 404
-
     vacations = load_json(VACATIONS_FILE, {})
     user_vac  = vacations.get(uid, {})
     added = 0
     while cur <= end:
-        user_vac[cur.strftime('%Y-%m-%d')] = hours
+        user_vac[cur.strftime('%Y-%m-%d')] = True
         cur += timedelta(days=1)
         added += 1
     vacations[uid] = user_vac
