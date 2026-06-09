@@ -1335,6 +1335,9 @@ async function loadData() {
   if (S.admin) {
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
     document.getElementById('topbarBadge').style.display = '';
+  } else {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    document.getElementById('topbarBadge').style.display = 'none';
   }
 
   buildCategories();
@@ -3174,6 +3177,9 @@ async function init() {
     if (S.admin) {
       document.querySelectorAll('.admin-only').forEach(el => el.style.display='');
       document.getElementById('topbarBadge').style.display='';
+    } else {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display='none');
+      document.getElementById('topbarBadge').style.display='none';
     }
   } catch(e) {
     S.projects=[]; S.allProjects=[];
