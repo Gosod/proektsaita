@@ -3299,7 +3299,7 @@ async function doLogin() {
 async function checkAuth() {
   await loadUserList();
   if (!AUTH.token || !AUTH.userId) { showRegister(); return; }
-  showLogin();
+  init();
 }
 
 // ══════════════════════════════════════════════════════
