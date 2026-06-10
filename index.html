@@ -63,8 +63,9 @@ html[data-theme="dark"] {
 /* ─── RESET ──────────────────────────────────────── */
 *,*::before,*::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 
-/* Плавная смена темы */
-html.theme-transitioning * {
+/* Плавная смена темы (ячейки табеля исключены — иначе на десктопе с большой
+   таблицей анимация всех ячеек одновременно подвисает) */
+html.theme-transitioning *:not(.ts-table th):not(.ts-table td) {
   transition: background-color .35s ease, color .35s ease, border-color .35s ease, fill .35s ease !important;
 }
 
@@ -438,7 +439,9 @@ textarea { min-height:76px; resize:vertical; }
 .carousel-card-fullname {
   font-size:13px; font-weight:600; color:var(--text);
   margin-bottom:12px;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  white-space:normal; text-overflow:clip;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; line-height:1.3;
 }
 .carousel-card-rm {
   background:none; border:none; font-size:16px; color:var(--muted);
@@ -454,6 +457,19 @@ textarea { min-height:76px; resize:vertical; }
 }
 .carousel-dot.active { background:var(--blue); width:16px; border-radius:3px; }
 
+/* Стрелки пролистывания карусели — только на десктопе (на мобильном свайп) */
+.carousel-nav {
+  display:none; position:absolute; top:50%; transform:translateY(-50%);
+  width:32px; height:32px; border-radius:50%; border:1.5px solid var(--border);
+  background:var(--white); color:var(--text); font-size:18px; line-height:1;
+  align-items:center; justify-content:center; z-index:2; box-shadow:var(--shadow);
+}
+.carousel-nav-prev { left:-16px; }
+.carousel-nav-next { right:-16px; }
+@media (min-width:768px) {
+  .carousel-nav { display:flex; }
+}
+
 /* ─── ERR ────────────────────────────────────────── */
 .err { font-size:12px; color:var(--danger); margin-top:5px; display:none; }
 .err.show { display:block; }
@@ -467,7 +483,7 @@ textarea { min-height:76px; resize:vertical; }
 .hours-num {
   font-size:32px; font-weight:700; color:var(--blue); line-height:1;
   border:none; background:transparent; width:90px; min-width:0;
-  outline:none; -moz-appearance:textfield;
+  outline:none; -moz-appearance:textfield; text-align:right;
 }
 .hours-num::-webkit-inner-spin-button,.hours-num::-webkit-outer-spin-button { -webkit-appearance:none; }
 .hours-num:focus { background:var(--blue-lt); border-radius:6px; padding:4px 8px; }
@@ -517,6 +533,10 @@ input[type="range"]::-moz-range-thumb {
   transition:border-color .15s;
 }
 .proj-item-comment:focus { outline:none; border-color:var(--blue); }
+
+/* Перетаскивание ползунка часов не должно выделять текст карточек/сводки */
+#report { user-select:none; -webkit-user-select:none; }
+#report input, #report textarea { user-select:text; -webkit-user-select:text; }
 
 /* ─── SUMMARY ────────────────────────────────────── */
 .summary-box { border:1.5px solid var(--border); border-radius:var(--r); overflow:hidden; margin-top:12px; }
@@ -590,6 +610,9 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .ts-lunch-cell { color:var(--muted); font-style:italic; }
 .ts-vac-row td { background:rgba(22,163,74,.06) !important; }
 .ts-vac-cell { color:var(--success); font-style:italic; }
+/* Закреплённая первая колонка должна оставаться непрозрачной — иначе при
+   горизонтальной прокрутке сквозь неё просвечивают значения соседних дней */
+.ts-lunch-row .ts-proj-cell, .ts-vac-row .ts-proj-cell { background:var(--white) !important; }
 .ts-norm-hint { font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; user-select:none; -webkit-user-select:none; }
 
 /* ─── STATS ──────────────────────────────────────── */
@@ -868,13 +891,6 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
 
   .auth-card { max-width:400px; }
-
-  /* Полное название проекта на карточке — вторая строка вместо обрезки */
-  .carousel-card-fullname {
-    white-space:normal; text-overflow:clip;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
-    overflow:hidden; line-height:1.3;
-  }
 }
 
 @media (min-width:1024px) {
@@ -1077,7 +1093,9 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
     <div id="carouselWrap" style="display:none">
       <label class="field-label" style="margin-bottom:8px">Добавленные проекты</label>
       <div class="carousel-wrap">
+        <button class="carousel-nav carousel-nav-prev" onclick="carouselScroll(-1)" aria-label="Назад">‹</button>
         <div class="carousel-track" id="carouselTrack"></div>
+        <button class="carousel-nav carousel-nav-next" onclick="carouselScroll(1)" aria-label="Вперёд">›</button>
         <div class="carousel-dots" id="carouselDots"></div>
       </div>
     </div>
@@ -1667,7 +1685,21 @@ function renderCarousel() {
 
   // Слушаем scroll для dots
   track.onscroll = updateCarouselDots;
+  // Прокрутка карусели колесом мыши (удобно на десктопе)
+  track.onwheel = (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    track.scrollLeft += e.deltaY;
+    e.preventDefault();
+  };
   updateTotal();
+}
+
+function carouselScroll(dir) {
+  const track = document.getElementById('carouselTrack');
+  const card  = track?.querySelector('.carousel-card');
+  if (!track || !card) return;
+  const step = card.getBoundingClientRect().width + 10; // + gap карусели
+  track.scrollBy({left: dir * step, behavior: 'smooth'});
 }
 
 function updateCarouselDots() {
