@@ -492,7 +492,7 @@ input[type="range"]::-moz-range-thumb {
 
 .quick-row { display:flex; gap:6px; flex-wrap:wrap; }
 .quick {
-  padding:7px 14px; border:1.5px solid var(--border);
+  padding:7px 10px; border:1.5px solid var(--border);
   border-radius:20px; background:var(--surface);
   font:600 13px var(--font); color:var(--text);
   transition:all .15s;
@@ -868,6 +868,13 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
 
   .auth-card { max-width:400px; }
+
+  /* Полное название проекта на карточке — вторая строка вместо обрезки */
+  .carousel-card-fullname {
+    white-space:normal; text-overflow:clip;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; line-height:1.3;
+  }
 }
 
 @media (min-width:1024px) {
@@ -1161,7 +1168,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
           <button class="quick" onclick="setAH(6)">6ч</button>
           <button class="quick" onclick="setAH(8)">8ч</button>
           <button class="quick" onclick="setAH(10)">10ч</button>
-          <button class="quick" onclick="setAH(12)">12ч</button>
+          <button class="quick" onclick="setAH(11)">11ч</button>
         </div>
       </div>
       <button class="btn btn-soft" onclick="addAdminProject()">+ Добавить ещё</button>
@@ -1641,7 +1648,7 @@ function renderCarousel() {
           <button class="quick" onclick="setCardHours(${i},6)">6ч</button>
           <button class="quick" onclick="setCardHours(${i},8)">8ч</button>
           <button class="quick" onclick="setCardHours(${i},10)">10ч</button>
-          <button class="quick" onclick="setCardHours(${i},12)">12ч</button>
+          <button class="quick" onclick="setCardHours(${i},11)">11ч</button>
         </div>
       </div>
       <input class="proj-item-comment" type="text" style="margin-top:10px"
