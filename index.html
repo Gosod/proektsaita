@@ -1941,15 +1941,19 @@ async function loadTimesheet(year, month, container) {
 }
 
 function buildTimesheetTable(data) {
-  const {year, month, days_in_month, norm, projects, rows, vacation_days = []} = data;
+  const {year, month, days_in_month, norm, projects, rows, vacation_days = [], off_days} = data;
   if (!projects.length) {
     return '<div style="padding:10px 2px;color:var(--muted);font-size:13px">Нет данных за этот месяц</div>';
   }
 
   const weekends = new Set();
-  for (let d = 1; d <= days_in_month; d++) {
-    const dow = new Date(year, month - 1, d).getDay();
-    if (dow === 0 || dow === 6) weekends.add(d);
+  if (Array.isArray(off_days)) {
+    off_days.forEach(d => weekends.add(d));
+  } else {
+    for (let d = 1; d <= days_in_month; d++) {
+      const dow = new Date(year, month - 1, d).getDay();
+      if (dow === 0 || dow === 6) weekends.add(d);
+    }
   }
 
   const totByDay  = {};
