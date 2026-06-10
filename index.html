@@ -838,6 +838,42 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 
 @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
 @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+
+/* ═══════════════════════════════════════════════════════
+   ДЕСКТОП-АДАПТАЦИЯ — мобильная вёрстка выше не меняется
+═══════════════════════════════════════════════════════ */
+@keyframes modalPopIn { from{opacity:0; transform:translateY(8px) scale(.97)} to{opacity:1; transform:translateY(0) scale(1)} }
+
+@media (min-width:768px) {
+  .topbar, .tabs, .page { max-width:720px; margin-left:auto; margin-right:auto; }
+
+  .tiles     { grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
+  .stat-grid { grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); }
+
+  /* Чипы проектов на экране «Отчёт» — крупнее */
+  .chips-grid { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; }
+  .chip       { padding:14px 10px; }
+  .chip-abbr  { font-size:13px; padding:4px 10px; }
+  .chip-name  { font-size:12px; -webkit-line-clamp:3; }
+
+  .cat-scroll { gap:8px; }
+  .cat-chip   { padding:11px 18px; font-size:14px; }
+
+  /* Модалка «Добавить проект» — центрированный диалог вместо нижнего листа */
+  .modal-bg { align-items:center; }
+  .modal {
+    border-radius:20px; max-width:480px;
+    max-height:85vh; overflow-y:auto;
+    animation:modalPopIn .2s var(--ease);
+  }
+
+  .auth-card { max-width:400px; }
+}
+
+@media (min-width:1024px) {
+  .topbar, .tabs, .page { max-width:960px; }
+  .chips-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
+}
 </style>
 </head>
 <body>
