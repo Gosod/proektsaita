@@ -1359,7 +1359,7 @@ tg.BackButton.onClick(goBack);
 async function loadData() {
   const resp = await fetch('/api/init', {
     method: 'POST',
-    headers: {'Content-Type':'application/json', 'Cache-Control': 'no-cache'},
+    headers: {'Content-Type':'application/json', 'Authorization': 'Bearer '+AUTH.token, 'Cache-Control': 'no-cache'},
     cache: 'no-store',
     body: JSON.stringify({user_id: S.userId})
   });
@@ -3330,7 +3330,7 @@ async function init() {
       cache:'no-store',
       body: JSON.stringify({user_id: S.userId})
     });
-    if (resp.status===401) { clearAuth(); checkAuth(); return; }
+    if (resp.status===401) { doLogout(); return; }
     const data = await resp.json();
     S.admin           = data.admin||false;
     S.username        = data.username||'';

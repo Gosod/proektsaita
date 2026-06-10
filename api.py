@@ -670,6 +670,7 @@ def reset_pin():
 
 # ── INIT ─────────────────────────────────────────────
 @app.route('/api/init', methods=['POST'])
+@auth_required
 def init_data():
     data    = request.get_json(silent=True) or {}
     user_id = data.get('user_id')
