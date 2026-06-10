@@ -897,6 +897,28 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   .topbar, .tabs, .page { max-width:960px; }
   .chips-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
 }
+
+/* Логотип Фотомеханики по бокам от центрированного контента — на широких экранах */
+@media (min-width:1280px) {
+  html::before, html::after {
+    content: '';
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 110px;
+    aspect-ratio: 173 / 48;
+    z-index: -1;
+    opacity: var(--bg-logo-op);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 173 48'%3E%3Cpath d='M63.5189 20.5234H86.5V13.6823H63.5189V20.5234Z' fill='%230069D2'/%3E%3Cpath d='M63.5189 34.2047H86.5V27.3635H63.5189V34.2047Z' fill='%230069D2'/%3E%3Cpath d='M63.5189 47.8869H86.5V41.0458H63.5189V47.8869Z' fill='%230069D2'/%3E%3Cpath d='M86.5 13.6823H109.481V6.84119H86.5V13.6823Z' fill='%230069D2'/%3E%3Cpath d='M86.5 27.3635H109.481V20.5234H86.5V27.3635Z' fill='%230069D2'/%3E%3Cpath d='M86.5 41.0457H109.481V34.2046H86.5V41.0457Z' fill='%230069D2'/%3E%3Cpath d='M0.0509033 27.3635H63.5189V20.5234H0.0509033V27.3635Z' fill='%230069D2'/%3E%3Cpath d='M0.0509033 13.6823H63.5189V6.84119H0.0509033V13.6823Z' fill='%230069D2'/%3E%3Cpath d='M0.0509033 41.0457H63.5189V34.2046H0.0509033V41.0457Z' fill='%230069D2'/%3E%3Cpath d='M109.481 20.5234H172.949V13.6823H109.481V20.5234Z' fill='%230069D2'/%3E%3Cpath d='M109.481 6.84116H172.949V0H109.481V6.84116Z' fill='%230069D2'/%3E%3Cpath d='M109.481 34.2047H172.949V27.3635H109.481V34.2047Z' fill='%230069D2'/%3E%3Cpath d='M109.481 47.8869H172.949V41.0458H109.481V47.8869Z' fill='%230069D2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    pointer-events: none;
+    transition: opacity .45s var(--ease);
+  }
+  html::before { left: 32px; }
+  html::after  { right: 32px; }
+}
 </style>
 </head>
 <body>
@@ -1448,6 +1470,59 @@ const CATEGORIES = [
 // Открытая папка
 let openCat = null;
 
+// Открытая папка в «По проектам» (Статистика)
+let openStatCat = null;
+function toggleStatCat(ci) {
+  openStatCat = (openStatCat === ci) ? null : ci;
+  renderStats();
+}
+
+// Группирует часы по проектам (s.by_project) в папки CATEGORIES по abbr проекта.
+function groupStatsByCategory(byProject) {
+  const fullToAbbr = {};
+  (S.allProjects||[]).forEach(p => { fullToAbbr[p.full] = p.abbr; });
+  const abbrToCat = {};
+  CATEGORIES.forEach((cat, ci) => {
+    cat.abbrs.forEach(a => { abbrToCat[a.toLowerCase()] = ci; });
+  });
+  const othersIdx = CATEGORIES.findIndex(c => c.name === 'Остальные');
+  const groups = CATEGORIES.map(cat => ({ name: cat.name, icon: cat.icon, items: [], total: 0 }));
+  Object.entries(byProject||{}).forEach(([full, hours]) => {
+    const abbr = fullToAbbr[full];
+    const ci = (abbr && abbr.toLowerCase() in abbrToCat) ? abbrToCat[abbr.toLowerCase()] : othersIdx;
+    groups[ci].items.push([full, hours]);
+    groups[ci].total = _r2(groups[ci].total + hours);
+  });
+  groups.forEach(g => g.items.sort((a,b)=>b[1]-a[1]));
+  return groups.map((g, ci) => ({...g, ci})).filter(g => g.items.length);
+}
+
+// Рендерит «По проектам» (Статистика) в виде папок-аккордеонов
+function renderStatProjectFolders(byProject) {
+  const groups = groupStatsByCategory(byProject);
+  return groups.map(g => {
+    const isOpen = openStatCat === g.ci;
+    return `
+      <div class="cat-section">
+        <div class="cat-header ${isOpen ? 'open' : ''}" onclick="toggleStatCat(${g.ci})">
+          <div class="cat-left">
+            <span class="cat-icon">${g.icon}</span>
+            <span class="cat-name">${g.name}</span>
+            <span class="cat-count">${g.total} ч</span>
+          </div>
+          <span class="cat-arrow">›</span>
+        </div>
+        <div class="cat-body ${isOpen ? 'open' : ''}">
+          ${g.items.map(([p,h])=>`
+            <div class="proj-stat-row">
+              <span class="proj-stat-name">${p}</span>
+              <span class="proj-stat-hrs">${h} ч</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
 // Пересчитывает папку "Остальные" — все проекты, не попавшие в другие папки.
 // projectList: массив проектов ({abbr, full}), от которого считаем.
 function recalcOthers(projectList) {
@@ -1931,11 +2006,7 @@ function renderStats() {
       <div class="stat-tile"><div class="stat-val">${s.total_reports}</div><div class="stat-lbl">Отчётов</div></div>
     </div>
     <label class="field-label" style="margin-bottom:8px">По проектам</label>
-    ${Object.entries(s.by_project||{}).sort((a,b)=>b[1]-a[1]).map(([p,h])=>`
-      <div class="proj-stat-row">
-        <span class="proj-stat-name">${p}</span>
-        <span class="proj-stat-hrs">${h} ч</span>
-      </div>`).join('')}
+    ${renderStatProjectFolders(s.by_project)}
     ${timesheetHtml}
   `;
 }
