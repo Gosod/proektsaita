@@ -333,7 +333,10 @@ def sheets_read_all() -> list:
     try:
         client  = _sheets_client()
         sheet   = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_REPORTS)
-        records = sheet.get_all_records()
+        # Колонка 5 (Часы) — не даём gspread численно интерпретировать значение,
+        # т.к. он считает запятую разделителем тысяч ("5,9" -> 59).
+        # Парсинг с учётом запятой как десятичного разделителя — в _normalize_sheets_records.
+        records = sheet.get_all_records(numericise_ignore=[5])
         log.info(f"SHEETS_READ | rows={len(records)}")
         return records
     except Exception as e:
