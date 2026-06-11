@@ -24,7 +24,6 @@
 /* ─── TOKENS ─────────────────────────────────────── */
 :root {
   --blue:    #0069D2;
-  --blue-deep: #0069D2;
   --blue-lt: #E8F2FB;
   --dark:    #031f28;
   --white:   #ffffff;
@@ -293,17 +292,6 @@ input,textarea,select { font-family:var(--font); }
 .tile-icon { font-size:24px; margin-bottom:10px; }
 .tile-title { font-size:14px; font-weight:600; }
 .tile-desc { font-size:12px; color:var(--muted); margin-top:2px; line-height:1.4; }
-
-/* ─── TODAY BANNER ───────────────────────────────── */
-.today-banner {
-  background:var(--blue-deep); border-radius:var(--r);
-  padding:14px 16px; margin-bottom:16px;
-  display:flex; align-items:center; gap:12px;
-  user-select:none; -webkit-user-select:none;
-}
-.today-dot { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.5); flex-shrink:0; }
-.today-text { font-size:13px; font-weight:500; color:#fff; }
-.today-sub { font-size:12px; color:rgba(255,255,255,.7); margin-top:1px; }
 
 /* ─── FORM ───────────────────────────────────────── */
 .field { margin-bottom:18px; }
@@ -1056,13 +1044,6 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 
 <!-- ═══ HOME ═══ -->
 <div class="page active" id="home">
-  <div class="today-banner" id="todayBanner">
-    <div class="today-dot"></div>
-    <div>
-      <div class="today-text" id="todayText">—</div>
-      <div class="today-sub" id="todaySub">Не забудь заполнить отчёт</div>
-    </div>
-  </div>
   <div class="sec-head">
     <div class="sec-title" id="homeGreet">Добрый день</div>
     <div class="sec-sub" id="homeSub">Что нужно сделать?</div>
@@ -1421,7 +1402,6 @@ async function loadData() {
   buildCategories();
   buildChips();
   renderStats();
-  updateTodayBanner();
   if (S.admin && S.curAdminTab) renderAdminTab(S.curAdminTab);
 }
 
@@ -1945,15 +1925,6 @@ function showSuccessScreen(lines, total, dateVal) {
 // ══════════════════════════════════════════════════════
 // MY STATS
 // ══════════════════════════════════════════════════════
-function updateTodayBanner() {
-  const dateStr = new Date().toLocaleString('ru', {day:'numeric', month:'long'});
-  document.getElementById('todayText').textContent = `Сегодня, ${dateStr}`;
-  const hours = S.userStats?.today_hours || 0;
-  document.getElementById('todaySub').textContent = hours > 0
-    ? `Отчёт отправлен · ${hours} ч`
-    : 'Не забудь заполнить отчёт';
-}
-
 function renderStats() {
   const s   = S.userStats;
   const el  = document.getElementById('statsContent');
@@ -3454,7 +3425,6 @@ async function init() {
   initHoursSlider();
   initNavBtns();
   renderStats();
-  updateTodayBanner();
   buildCategories();
   buildChips();
   syncThemeIcon();

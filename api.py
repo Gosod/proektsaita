@@ -410,17 +410,12 @@ def build_user_stats(user_id: int, all_reports: list, all_users: dict = None) ->
         {r.get('date', '')[:7] for r in user_reports if len(r.get('date', '')) >= 7},
         reverse=True,
     )
-    today_str = msk_now().strftime('%Y-%m-%d')
-    today_hours = round(sum(
-        r.get('hours', 0) for r in user_reports if r.get('date', '') == today_str
-    ), 2)
     return {
         'total_hours':         round(sum(r.get('hours', 0) for r in user_reports), 2),
         'total_reports':       len(user_reports),
         'by_project':          by_project,
         'month_hours':         month_hours,
         'months_with_reports': months_with_reports,
-        'today_hours':         today_hours,
     }
 
 
