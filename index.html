@@ -24,6 +24,7 @@
 /* ─── TOKENS ─────────────────────────────────────── */
 :root {
   --blue:    #0069D2;
+  --blue-deep: #0069D2;
   --blue-lt: #E8F2FB;
   --dark:    #031f28;
   --white:   #ffffff;
@@ -154,7 +155,7 @@ input,textarea,select { font-family:var(--font); }
 /* ─── AUTH SCREENS ───────────────────────────────── */
 .auth-screen {
   position: fixed; inset: 0; z-index: 1000;
-  background: var(--white) url('/bg.jpg') no-repeat center center / cover;
+  background: var(--bg);
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   padding: 24px;
@@ -295,7 +296,7 @@ input,textarea,select { font-family:var(--font); }
 
 /* ─── TODAY BANNER ───────────────────────────────── */
 .today-banner {
-  background:var(--blue); border-radius:var(--r);
+  background:var(--blue-deep); border-radius:var(--r);
   padding:14px 16px; margin-bottom:16px;
   display:flex; align-items:center; gap:12px;
   user-select:none; -webkit-user-select:none;
@@ -445,7 +446,7 @@ textarea { min-height:76px; resize:vertical; }
 }
 .carousel-card-rm {
   background:none; border:none; font-size:16px; color:var(--muted);
-  flex-shrink:0; transition:color .15s; padding:2px 4px; margin-left:auto;
+  flex-shrink:0; transition:color .15s; padding:8px 10px; margin:-8px -10px -8px auto;
 }
 .carousel-card-rm:active { color:var(--danger); }
 .carousel-dots {
@@ -879,6 +880,9 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   .chip-abbr  { font-size:13px; padding:4px 10px; }
   .chip-name  { font-size:12px; -webkit-line-clamp:3; }
 
+  /* Карточка карусели — шире, чтобы quick-row из 5 кнопок не переносился */
+  .carousel-card { max-width:400px; }
+
   .cat-scroll { gap:8px; }
   .cat-chip   { padding:11px 18px; font-size:14px; }
 
@@ -951,7 +955,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
       <select class="auth-input" id="regUserId" onchange="onRegUserChange()">
         <option value="">— Выберите себя —</option>
       </select>
-      <div class="auth-hint" id="regHint">Серым отмечены уже зарегистрированные — им нужно входить по паролю</div>
+      <div class="auth-hint" id="regHint">Уже зарегистрированным нужно входить по паролю</div>
     </div>
     <div class="auth-field">
       <label class="auth-label">Код-приглашение</label>
@@ -1107,10 +1111,6 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   </div>
 
   <div id="selectedWrap" style="display:none">
-    <div class="field">
-      <button class="btn btn-soft" onclick="addProject()" style="margin-top:0">+ Добавить проект</button>
-    </div>
-
     <!-- Карусель добавленных проектов -->
     <div id="carouselWrap" style="display:none">
       <label class="field-label" style="margin-bottom:8px">Добавленные проекты</label>
@@ -1294,6 +1294,12 @@ const S = {
 function haptic(type='light') { try { tg.HapticFeedback.impactOccurred(type); } catch(e){} }
 function hapticNotif(type='success') { try { tg.HapticFeedback.notificationOccurred(type); } catch(e){} }
 
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[c]));
+}
+
 // ══════════════════════════════════════════════════════
 // ТЕМА (светлая / тёмная) — анимация заливки кругом
 // ══════════════════════════════════════════════════════
@@ -1382,8 +1388,7 @@ async function loadData() {
   const resp = await fetch('/api/init', {
     method: 'POST',
     headers: {'Content-Type':'application/json', 'Authorization': 'Bearer '+AUTH.token, 'Cache-Control': 'no-cache'},
-    cache: 'no-store',
-    body: JSON.stringify({user_id: S.userId})
+    cache: 'no-store'
   });
   if (!resp.ok) throw new Error('API error');
   const data = await resp.json();
@@ -1416,6 +1421,7 @@ async function loadData() {
   buildCategories();
   buildChips();
   renderStats();
+  updateTodayBanner();
   if (S.admin && S.curAdminTab) renderAdminTab(S.curAdminTab);
 }
 
@@ -1939,6 +1945,15 @@ function showSuccessScreen(lines, total, dateVal) {
 // ══════════════════════════════════════════════════════
 // MY STATS
 // ══════════════════════════════════════════════════════
+function updateTodayBanner() {
+  const dateStr = new Date().toLocaleString('ru', {day:'numeric', month:'long'});
+  document.getElementById('todayText').textContent = `Сегодня, ${dateStr}`;
+  const hours = S.userStats?.today_hours || 0;
+  document.getElementById('todaySub').textContent = hours > 0
+    ? `Отчёт отправлен · ${hours} ч`
+    : 'Не забудь заполнить отчёт';
+}
+
 function renderStats() {
   const s   = S.userStats;
   const el  = document.getElementById('statsContent');
@@ -2156,6 +2171,11 @@ function renderAdminOverview() {
   if (!s) { el.innerHTML=`<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Нет данных</div></div>`; return; }
 
   const projSorted = Object.entries(s.projects||{}).sort((a,b)=>b[1]-a[1]);
+
+  // el.innerHTML заменит canvas#projChart новым элементом — старый
+  // экземпляр диаграммы нужно уничтожить и сбросить, иначе при повторном
+  // открытии аккордеона диаграмма не перерисуется на новом canvas
+  if (S.projChart) { S.projChart.destroy(); S.projChart = null; }
 
   el.innerHTML = `
     <div class="stat-grid">
@@ -2809,8 +2829,8 @@ async function saveEmpProjs(userId) {
   const uname = S.allUsers?.find(u=>u.id===userId)?.username||'';
   try {
     const resp = await fetch('/api/assign', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({admin_id: S.userId, user_id: userId, abbrs})
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+      body: JSON.stringify({user_id: userId, abbrs})
     });
     if (!resp.ok) throw new Error();
     toast(`✓ Сохранено для ${uname}`, 'ok');
@@ -2866,8 +2886,7 @@ async function removeProject(abbr) {
     try {
       const resp = await fetch(`/api/project/${abbr}`, {
         method: 'DELETE',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({user_id: S.userId})
+        headers: {'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token}
       });
       if (!resp.ok) throw new Error();
       S.allProjects = S.allProjects.filter(p=>p.abbr!==abbr);
@@ -2882,11 +2901,13 @@ async function removeProject(abbr) {
 async function loadReports() {
   const u = document.getElementById('filterUser')?.value;
   const d = document.getElementById('filterDate')?.value;
-  let url = `/api/reports?admin_id=${S.userId}`;
-  if (u) url += `&user_id=${u}`;
-  if (d) url += `&date=${d}`;
+  let url = `/api/reports`;
+  const params = [];
+  if (u) params.push(`user_id=${u}`);
+  if (d) params.push(`date=${d}`);
+  if (params.length) url += `?${params.join('&')}`;
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, {headers:{'Authorization':'Bearer '+AUTH.token}});
     if (!resp.ok) throw new Error();
     const data = await resp.json();
     renderReportsTable(data.reports || []);
@@ -2936,7 +2957,7 @@ function renderReportsTable(reports) {
     <div class="rep-day-card">
       <div class="rep-day-head">
         <div>
-          <div class="rep-day-name">${g.username}</div>
+          <div class="rep-day-name">${escapeHtml(g.username)}</div>
           <div class="rep-day-date">${fmtDate(g.date)}</div>
         </div>
         <div class="rep-day-total">${+g.total.toFixed(2)} ч</div>
@@ -2946,13 +2967,13 @@ function renderReportsTable(reports) {
         return `
         <div class="rep-proj-line">
           <div class="rep-proj-info">
-            <div class="rep-proj-nm">${r.project}</div>
-            ${comment ? `<div class="rep-proj-cmt">${comment}</div>` : ''}
+            <div class="rep-proj-nm">${escapeHtml(r.project)}</div>
+            ${comment ? `<div class="rep-proj-cmt">${escapeHtml(comment)}</div>` : ''}
           </div>
           <span class="rep-proj-hrs">${r.hours} ч</span>
           <div class="rep-proj-actions">
-            <button class="rep-mini-btn" onclick='editReport(${JSON.stringify(r).replace(/'/g,"&#39;")})'>✎</button>
-            <button class="rep-mini-btn del" onclick='delReport("${r.id||''}","${(r.username||'').replace(/"/g,'')}")'>✕</button>
+            <button class="rep-mini-btn" onclick='editReport(${JSON.stringify(r).replace(/&/g,"&amp;").replace(/'/g,"&#39;")})'>✎</button>
+            <button class="rep-mini-btn del" onclick='delReport("${r.id||''}","${(r.username||'').replace(/["']/g,'')}")'>✕</button>
           </div>
         </div>`;
       }).join('')}
@@ -2967,8 +2988,7 @@ async function delReport(id, username) {
   showConfirm(`Удалить отчёт?\n${username}`, async () => {
     try {
       const resp = await fetch(`/api/report/${id}`, {
-        method:'DELETE', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({admin_id: S.userId})
+        method:'DELETE', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token}
       });
       if (!resp.ok) throw new Error();
       toast('Отчёт удалён', 'info');
@@ -2988,17 +3008,17 @@ function editReport(r) {
     <div class="edit-box">
       <div class="edit-title">Редактировать отчёт</div>
       <label class="edit-lbl">Сотрудник</label>
-      <input class="edit-inp" value="${r.username||'?'}" disabled style="opacity:.55">
+      <input class="edit-inp" value="${escapeHtml(r.username||'?')}" disabled style="opacity:.55">
       <label class="edit-lbl">Проект</label>
       <select class="edit-inp" id="editProj">
-        ${S.allProjects.map(p=>`<option value="${p.full}"${p.full===r.project?' selected':''}>${p.full}</option>`).join('')}
+        ${S.allProjects.map(p=>`<option value="${escapeHtml(p.full)}"${p.full===r.project?' selected':''}>${escapeHtml(p.full)}</option>`).join('')}
       </select>
       <label class="edit-lbl">Часы</label>
       <input class="edit-inp" type="number" id="editHours" value="${r.hours}" step="0.25" min="0.25" max="24">
       <label class="edit-lbl">Дата</label>
       <input class="edit-inp" type="date" id="editDate" value="${r.date||''}">
       <label class="edit-lbl">Комментарий</label>
-      <textarea class="edit-inp" id="editComments" style="min-height:60px">${r.comments||''}</textarea>
+      <textarea class="edit-inp" id="editComments" style="min-height:60px">${escapeHtml(r.comments||'')}</textarea>
       <div class="edit-btns">
         <button class="edit-save" onclick="saveEdit()">Сохранить</button>
         <button class="edit-cancel" onclick="closeEdit()">Отмена</button>
@@ -3012,9 +3032,8 @@ async function saveEdit() {
   if (isNaN(hours)||hours<=0||hours>24) { toast('Часы 0.25–24','err'); return; }
   try {
     const resp = await fetch(`/api/report/${r.id}`, {
-      method:'PUT', headers:{'Content-Type':'application/json'},
+      method:'PUT', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
       body: JSON.stringify({
-        admin_id: S.userId,
         project:  document.getElementById('editProj').value,
         hours, date: document.getElementById('editDate').value,
         comments: document.getElementById('editComments').value
@@ -3168,8 +3187,8 @@ async function submitAddProject() {
 
   try {
     const resp = await fetch('/api/project', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({user_id: S.userId, abbr, full})
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+      body: JSON.stringify({abbr, full})
     });
     if (!resp.ok) { const e=await resp.json(); throw new Error(e.error||'Ошибка'); }
     const np = {abbr, full};
@@ -3263,15 +3282,18 @@ async function loadUserList() {
       users.forEach(u => {
         const opt = document.createElement('option');
         opt.value = u.id;
-        opt.textContent = u.display_name || u.username;
+        const baseName = u.display_name || u.username;
         opt.dataset.hasPassword = u.has_password ? '1' : '0';
-        // В списке регистрации занятые — серые (но кликабельные для подсказки)
-        if (selId === 'regUserId' && u.has_password) {
-          opt.style.color = '#9aa3ad';
-        }
+        // В списке регистрации занятые помечены текстом (но кликабельные для подсказки)
+        opt.textContent = (selId === 'regUserId' && u.has_password)
+          ? `${baseName} (уже зарегистрирован)`
+          : baseName;
         sel.appendChild(opt);
       });
     });
+    const lastUid = localStorage.getItem('phm_last_uid');
+    const loginSel = document.getElementById('loginUserId');
+    if (lastUid && loginSel) loginSel.value = lastUid;
   } catch(e) { console.error('loadUserList:', e); }
 }
 
@@ -3284,7 +3306,7 @@ function onRegUserChange() {
     // Уже зарегистрирован — перекидываем на вход с подставленным именем
     err.classList.remove('show');
     const uid  = sel.value;
-    const name = opt.textContent;
+    const name = opt.textContent.replace(' (уже зарегистрирован)', '');
     showLogin();
     const loginSel = document.getElementById('loginUserId');
     if (loginSel) loginSel.value = uid;
@@ -3323,7 +3345,7 @@ async function doRegister() {
       // Если уже зарегистрирован — мягко перекидываем на вход
       if ((data.error||'').toLowerCase().includes('уже зарегистрирован') ||
           (data.error||'').toLowerCase().includes('пароль уже')) {
-        const name = sel.selectedOptions[0]?.textContent || '';
+        const name = (sel.selectedOptions[0]?.textContent || '').replace(' (уже зарегистрирован)', '');
         showLogin();
         const loginSel = document.getElementById('loginUserId');
         if (loginSel) loginSel.value = uid;
@@ -3362,6 +3384,7 @@ async function doLogin() {
     if (!resp.ok) { err.textContent=data.error||'Ошибка'; err.classList.add('show'); _authBusy=false; return; }
     saveAuth(data);
     localStorage.setItem('phm_display', data.display_name || document.getElementById('loginUserId').selectedOptions[0]?.textContent||'');
+    localStorage.setItem('phm_last_uid', uid);
     await init();
     _authBusy = false;
   } catch(e) { err.textContent='Ошибка сети'; err.classList.add('show'); _authBusy=false; }
@@ -3398,8 +3421,7 @@ async function init() {
     const resp = await fetch('/api/init', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token,'Cache-Control':'no-cache'},
-      cache:'no-store',
-      body: JSON.stringify({user_id: S.userId})
+      cache:'no-store'
     });
     if (resp.status===401) { doLogout(); return; }
     const data = await resp.json();
@@ -3432,6 +3454,7 @@ async function init() {
   initHoursSlider();
   initNavBtns();
   renderStats();
+  updateTodayBanner();
   buildCategories();
   buildChips();
   syncThemeIcon();

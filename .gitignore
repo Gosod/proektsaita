@@ -4,3 +4,4 @@ __pycache__/
 credentials.json
 reports_local.json
 vacations.json
+users.json

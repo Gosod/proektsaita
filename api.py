@@ -284,6 +284,16 @@ def _sheets_client():
     return gspread.authorize(creds)
 
 
+def _hours_for_sheets(hours) -> str:
+    """
+    Форматирует часы для записи в Sheets с valueInputOption=USER_ENTERED.
+    Таблица настроена на русскую локаль (запятая — десятичный разделитель,
+    точка — разделитель тысяч), поэтому "2.1" Sheets превращает в 21.
+    Заменяем точку на запятую: "2.1" -> "2,1" -> корректно 2.1.
+    """
+    return str(hours).replace('.', ',')
+
+
 def sheets_append(report: dict) -> bool:
     """Добавить строку в Google Sheets с retry."""
     dt_str = report.get('datetime', '')
@@ -300,7 +310,7 @@ def sheets_append(report: dict) -> bool:
         time_str,
         report.get('username', ''),
         report.get('project', ''),
-        report.get('hours', 0),
+        _hours_for_sheets(report.get('hours', 0)),
         report.get('comments', ''),
     ]
 
@@ -400,12 +410,17 @@ def build_user_stats(user_id: int, all_reports: list, all_users: dict = None) ->
         {r.get('date', '')[:7] for r in user_reports if len(r.get('date', '')) >= 7},
         reverse=True,
     )
+    today_str = msk_now().strftime('%Y-%m-%d')
+    today_hours = round(sum(
+        r.get('hours', 0) for r in user_reports if r.get('date', '') == today_str
+    ), 2)
     return {
         'total_hours':         round(sum(r.get('hours', 0) for r in user_reports), 2),
         'total_reports':       len(user_reports),
         'by_project':          by_project,
         'month_hours':         month_hours,
         'months_with_reports': months_with_reports,
+        'today_hours':         today_hours,
     }
 
 
@@ -443,24 +458,7 @@ def build_admin_stats(all_reports: list, all_projects: list) -> dict:
 
 
 # ══════════════════════════════════════════════════════
-# ДЕКОРАТОР: требует admin
-# ══════════════════════════════════════════════════════
-def admin_required(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        # Пробуем взять admin_id из тела или query
-        data = request.get_json(silent=True) or {}
-        admin_id = data.get('admin_id') or request.args.get('admin_id')
-        if not is_admin(admin_id):
-            log.warning(f"FORBIDDEN | endpoint={request.path} | admin_id={admin_id}")
-            return jsonify({'error': 'Forbidden'}), 403
-        return f(*args, **kwargs)
-    return wrapper
-
-
-# ══════════════════════════════════════════════════════
 # ДЕКОРАТОР: требует подписанный токен админа
-# (для управления учётными записями — строже, чем admin_id в теле)
 # ══════════════════════════════════════════════════════
 def admin_token_required(f):
     @wraps(f)
@@ -672,11 +670,7 @@ def reset_pin():
 @app.route('/api/init', methods=['POST'])
 @auth_required
 def init_data():
-    data    = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-
-    if not user_id:
-        return jsonify({'error': 'user_id required'}), 400
+    user_id = request.current_user['uid']
 
     all_users    = load_json(USERS_FILE, {})
     all_projects = load_json(PROJECTS_FILE, [])
@@ -1014,7 +1008,7 @@ def admin_del_vacation():
 
 
 @app.route('/api/reports', methods=['GET'])
-@admin_required
+@admin_token_required
 def get_reports():
     filter_user    = request.args.get('user_id')
     filter_project = request.args.get('project', '').lower()
@@ -1037,7 +1031,7 @@ def get_reports():
 
 # ── UPDATE REPORT (редактирование строки в Sheets) ────
 @app.route('/api/report/<report_id>', methods=['PUT'])
-@admin_required
+@admin_token_required
 def update_report(report_id):
     """
     Редактирование строки в Sheets по индексу.
@@ -1073,7 +1067,7 @@ def update_report(report_id):
             except Exception:
                 pass
         if 'hours' in data:
-            sheet.update_cell(sheet_row, 5, float(data['hours']))
+            sheet.update_cell(sheet_row, 5, _hours_for_sheets(float(data['hours'])))
         if 'project' in data:
             sheet.update_cell(sheet_row, 4, data['project'])
         if 'comments' in data:
@@ -1089,7 +1083,7 @@ def update_report(report_id):
 
 # ── DELETE REPORT ──────────────────────────────────────
 @app.route('/api/report/<report_id>', methods=['DELETE'])
-@admin_required
+@admin_token_required
 def delete_report(report_id):
     """Удаление строки из Sheets по индексу."""
     if not report_id.startswith('sheets_'):
@@ -1114,12 +1108,9 @@ def delete_report(report_id):
 
 # ── PROJECT MANAGEMENT ─────────────────────────────────
 @app.route('/api/project', methods=['POST'])
+@admin_token_required
 def add_project():
-    data    = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-
-    if not is_admin(user_id):
-        return jsonify({'error': 'Forbidden'}), 403
+    data = request.get_json(silent=True) or {}
 
     abbr = str(data.get('abbr', '')).strip().upper()
     full = str(data.get('full', '')).strip()
@@ -1136,18 +1127,13 @@ def add_project():
     projects.append({'abbr': abbr, 'full': full})
     save_json(PROJECTS_FILE, projects)
 
-    log.info(f"PROJECT_ADDED | admin={user_id} | abbr={abbr} | full={full}")
+    log.info(f"PROJECT_ADDED | admin={request.current_user['uid']} | abbr={abbr} | full={full}")
     return jsonify({'success': True, 'project': {'abbr': abbr, 'full': full}})
 
 
 @app.route('/api/project/<abbr>', methods=['DELETE'])
+@admin_token_required
 def remove_project(abbr):
-    data    = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-
-    if not is_admin(user_id):
-        return jsonify({'error': 'Forbidden'}), 403
-
     projects = load_json(PROJECTS_FILE, [])
     before   = len(projects)
     projects = [p for p in projects if p['abbr'] != abbr]
@@ -1156,19 +1142,17 @@ def remove_project(abbr):
         return jsonify({'error': 'Проект не найден'}), 404
 
     save_json(PROJECTS_FILE, projects)
-    log.info(f"PROJECT_REMOVED | admin={user_id} | abbr={abbr}")
+    log.info(f"PROJECT_REMOVED | admin={request.current_user['uid']} | abbr={abbr}")
     return jsonify({'success': True, 'deleted': abbr})
 
 
 # ── ASSIGN PROJECTS ────────────────────────────────────
 @app.route('/api/assign', methods=['POST'])
+@admin_token_required
 def assign_projects():
-    data     = request.get_json(silent=True) or {}
-    admin_id = data.get('admin_id') or data.get('user_id')
-    user_id  = data.get('user_id') if data.get('admin_id') else None
+    data    = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
 
-    if not is_admin(admin_id):
-        return jsonify({'error': 'Forbidden'}), 403
     if not user_id:
         return jsonify({'error': 'user_id required'}), 400
 
@@ -1177,7 +1161,7 @@ def assign_projects():
     assignments[str(user_id)] = abbrs
     save_json(USER_PROJECTS_FILE, assignments)
 
-    log.info(f"PROJECTS_ASSIGNED | admin={admin_id} | user={user_id} | abbrs={abbrs}")
+    log.info(f"PROJECTS_ASSIGNED | admin={request.current_user['uid']} | user={user_id} | abbrs={abbrs}")
     return jsonify({'success': True, 'user_id': user_id, 'projects': abbrs})
 
 
