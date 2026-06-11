@@ -1141,10 +1141,9 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   </div>
   <div class="sub-tabs">
     <button class="sub-tab active" onclick="adminTab('overview',this)">Обзор</button>
-    <button class="sub-tab" onclick="adminTab('employees',this)">Сотрудники</button>
-    <button class="sub-tab" onclick="adminTab('access',this)">Доступы</button>
+    <button class="sub-tab" onclick="adminTab('access',this)">Сотрудники</button>
     <button class="sub-tab" onclick="adminTab('reports',this)">Отчёты</button>
-    <button class="sub-tab" onclick="adminTab('manage',this)">Настройки</button>
+    <button class="sub-tab" onclick="adminTab('manage',this)">Проекты</button>
   </div>
   <div id="adminContent"></div>
   <button class="btn btn-outline" onclick="nav('home')" style="margin-top:6px">Назад</button>
@@ -2128,7 +2127,6 @@ function adminTab(tab, btn) {
 }
 function renderAdminTab(tab) {
   if      (tab==='overview')   renderAdminOverview();
-  else if (tab==='employees')  renderAdminEmployees();
   else if (tab==='access')     renderAdminAccess();
   else if (tab==='reports')    renderAdminReports();
   else if (tab==='manage')     renderAdminManage();
@@ -2140,6 +2138,7 @@ function renderAdminOverview() {
   if (!s) { el.innerHTML=`<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Нет данных</div></div>`; return; }
 
   const projSorted = Object.entries(s.projects||{}).sort((a,b)=>b[1]-a[1]);
+  const empSorted  = [...(s.employees||[])].sort((a,b)=>b.hours-a.hours);
 
   // el.innerHTML заменит canvas#projChart новым элементом — старый
   // экземпляр диаграммы нужно уничтожить и сбросить, иначе при повторном
@@ -2158,6 +2157,26 @@ function renderAdminOverview() {
 
     <!-- Диаграмма по сотрудникам — видна сразу -->
     <div class="chart-wrap" style="margin-top:12px"><canvas id="overviewChart"></canvas></div>
+
+    <!-- Часы по сотрудникам — в аккордеоне -->
+    <div class="ov-acc">
+      <div class="ov-acc-head" onclick="toggleOvAcc('empListAcc', this)">
+        <span class="ov-acc-title">👥 Часы по сотрудникам (${empSorted.length})</span>
+        <span class="ov-acc-arrow">›</span>
+      </div>
+      <div class="ov-acc-body" id="empListAcc">
+        ${empSorted.map(e=>`
+          <div class="emp-card">
+            <div class="emp-head">
+              <div class="emp-name">${e.username||'?'}</div>
+              <div class="emp-hours">${e.hours} ч</div>
+            </div>
+            <div class="emp-meta">Отчётов: ${e.reports}</div>
+            ${Object.entries(e.projects||{}).map(([p,h])=>`
+              <div class="emp-proj"><span class="emp-proj-nm">${p}</span><span>${h} ч</span></div>`).join('')}
+          </div>`).join('')}
+      </div>
+    </div>
 
     <!-- Диаграмма по проектам — в аккордеоне -->
     <div class="ov-acc">
@@ -2237,24 +2256,8 @@ function toggleOvAcc(id, head) {
   }
 }
 
-function renderAdminEmployees() {
-  const s  = S.adminStats;
-  const el = document.getElementById('adminContent');
-  if (!s?.employees?.length) { el.innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">Нет данных</div></div>`; return; }
-  el.innerHTML = [...s.employees].sort((a,b)=>b.hours-a.hours).map(e=>`
-    <div class="emp-card">
-      <div class="emp-head">
-        <div class="emp-name">${e.username||'?'}</div>
-        <div class="emp-hours">${e.hours} ч</div>
-      </div>
-      <div class="emp-meta">Отчётов: ${e.reports}</div>
-      ${Object.entries(e.projects||{}).map(([p,h])=>`
-        <div class="emp-proj"><span class="emp-proj-nm">${p}</span><span>${h} ч</span></div>`).join('')}
-    </div>`).join('');
-}
-
 // ══════════════════════════════════════════════════════
-// ADMIN — ДОСТУПЫ (управление учётными записями сотрудников)
+// ADMIN — СОТРУДНИКИ (управление учётными записями сотрудников)
 // ══════════════════════════════════════════════════════
 async function renderAdminAccess() {
   const el = document.getElementById('adminContent');
