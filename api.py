@@ -892,6 +892,83 @@ def submit_report_pwa():
     return jsonify({'success': True, 'saved': len(saved), 'sheets_errors': errors})
 
 
+# ── CREATE REPORT за сотрудника (только Admin) ────────
+@app.route('/api/report', methods=['POST'])
+@admin_token_required
+def admin_create_report():
+    """Создание отчёта администратором за выбранного сотрудника."""
+    data       = request.get_json(silent=True) or {}
+    target_uid = str(data.get('on_behalf_of_user_id', '')).strip()
+    if not target_uid:
+        return jsonify({'error': 'on_behalf_of_user_id required'}), 400
+
+    users    = load_json(USERS_FILE, {})
+    user_rec = users.get(target_uid)
+    if user_rec is None:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+
+    username     = user_rec.get('username', '').strip()
+    is_test_user = bool(user_rec.get('is_test', False))
+    # Без ника строка в Sheets не будет привязана к сотруднику
+    # (_normalize_sheets_records пропускает записи с неизвестным/пустым ником),
+    # поэтому такой отчёт «молча исчез» бы при чтении — отклоняем сразу.
+    if not username:
+        return jsonify({'error': 'У сотрудника не задан ник — отчёт нельзя создать'}), 400
+
+    projects    = data.get('projects', [])
+    general_cmt = data.get('comments', '-')
+    custom_date = data.get('custom_date')
+    if not projects:
+        return jsonify({'error': 'projects required'}), 400
+
+    if custom_date:
+        try:
+            dt = MSK.localize(datetime.strptime(custom_date, '%Y-%m-%d'))
+        except Exception:
+            dt = msk_now()
+    else:
+        dt = msk_now()
+
+    # Конфликт: день отмечен как отпуск → отчёт сдавать нельзя
+    date_str = dt.strftime('%Y-%m-%d')
+    user_vac = load_json(VACATIONS_FILE, {}).get(target_uid, {})
+    if date_str in user_vac:
+        return jsonify({
+            'error':    f'День {date_str} отмечен как отпуск. Снимите отметку, чтобы добавить отчёт.',
+            'conflict': 'vacation',
+            'date':     date_str,
+        }), 409
+
+    errors = 0
+    saved  = []
+    for item in projects:
+        proj_cmt = str(item.get('comment', '')).strip()
+        try:
+            hours = float(item.get('hours', 0))
+        except (ValueError, TypeError):
+            hours = 0.0
+        report = {
+            'user_id':  int(target_uid),
+            'username': username,
+            'project':  item.get('project', '?'),
+            'hours':    hours,
+            'comments': proj_cmt or general_cmt,
+            'date':     date_str,
+            'datetime': dt.strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        # Тестовый сотрудник — сохраняем локально, не в Sheets
+        if is_test_user:
+            append_local_report(report)
+            saved.append(report)
+            continue
+        if not sheets_append(report):
+            errors += 1
+        saved.append(report)
+
+    log.info(f"ADMIN_REPORT_CREATE | by={request.current_user.get('uid')} | for={target_uid} | n={len(saved)} | errors={errors}")
+    return jsonify({'success': True, 'saved': len(saved), 'sheets_errors': errors})
+
+
 # ── GET REPORTS ────────────────────────────────────────
 @app.route('/api/user/timesheet', methods=['GET'])
 @auth_required
