@@ -766,6 +766,12 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
             username = str(row.get('Сотрудник', '') or row.get('username', '')).strip()
             if username.lower() in test_unames:
                 continue  # тестовый сотрудник — пропускаем
+            # Сотрудник, которого нет в users.json (опечатка / тестовая запись
+            # вроде «ГЛЕБ КРУПСКИЙ ОЧЕНЬ ОТВЕТСТВЕННЫЙ!») — не должен попадать
+            # в статистику как фантомный сотрудник. Пропускаем и логируем.
+            if username and username.lower() not in uname_to_id:
+                log.info(f"SHEETS_SKIP_UNKNOWN | row={i} | user='{username}' нет в users.json — пропущен")
+                continue
             project  = str(row.get('Проект', '')  or row.get('project', '')).strip()
             # Парсим часы — учитываем разные форматы: 7.25, 7,25, 725 (ошибка)
             raw_hours = str(row.get('Часы', 0) or row.get('hours', 0)).strip()
