@@ -604,6 +604,15 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .ts-lunch-row .ts-proj-cell, .ts-vac-row .ts-proj-cell { background:var(--white) !important; }
 .ts-norm-hint { font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; user-select:none; -webkit-user-select:none; }
 
+/* ─── Подсветка ячеек: переработка / отработка невыхода ─── */
+.ts-cell-overtime { background:rgba(250,204,21,.35) !important; }
+.ts-cell-dayoff   { background:rgba(59,130,246,.22) !important; }
+.ts-legend { display:flex; flex-wrap:wrap; gap:12px; font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; }
+.ts-legend-item { display:flex; align-items:center; gap:5px; }
+.ts-legend-swatch { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+.ts-legend-swatch.ts-cell-overtime { background:rgba(250,204,21,.7); }
+.ts-legend-swatch.ts-cell-dayoff   { background:rgba(59,130,246,.55); }
+
 /* ─── STATS ──────────────────────────────────────── */
 .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
 .stat-tile {
@@ -2007,7 +2016,7 @@ async function loadTimesheet(year, month, container) {
 }
 
 function buildTimesheetTable(data) {
-  const {year, month, days_in_month, norm, projects, rows, vacation_days = [], off_days} = data;
+  const {year, month, days_in_month, norm, projects, rows, cell_flags = {}, vacation_days = [], off_days} = data;
   if (!projects.length) {
     return '<div style="padding:10px 2px;color:var(--muted);font-size:13px">Нет данных за этот месяц</div>';
   }
@@ -2045,13 +2054,23 @@ function buildTimesheetTable(data) {
 
   const days = Array.from({length: days_in_month}, (_, i) => i + 1);
   const wkCls = d => weekends.has(d) ? ' class="ts-weekend"' : '';
+  const flagCls = (d, proj) => {
+    const flag = (cell_flags[String(d)] || {})[proj];
+    return flag === 'overtime' ? 'ts-cell-overtime' : flag === 'dayoff' ? 'ts-cell-dayoff' : '';
+  };
+  const projCellCls = (d, proj) => {
+    const classes = [flagCls(d, proj), weekends.has(d) ? 'ts-weekend' : ''].filter(Boolean);
+    return classes.length ? ` class="${classes.join(' ')}"` : '';
+  };
+  let hasFlags = false;
 
   const headCells = days.map(d => `<th${wkCls(d)}>${d}</th>`).join('');
 
   const projRows = projects.map(proj => {
     const cells = days.map(d => {
       const hrs = (rows[String(d)] || {})[proj] || 0;
-      return `<td${wkCls(d)}>${hrs > 0 ? hrs : ''}</td>`;
+      if (flagCls(d, proj)) hasFlags = true;
+      return `<td${projCellCls(d, proj)}>${hrs > 0 ? hrs : ''}</td>`;
     }).join('');
     return `<tr><td class="ts-proj-cell">${proj}</td>${cells}<td class="ts-total-col">${totByProj[proj] || 0}</td></tr>`;
   }).join('');
@@ -2091,7 +2110,12 @@ function buildTimesheetTable(data) {
         </tbody>
       </table>
     </div>
-    <div class="ts-norm-hint">Норма за месяц: ${norm} ч · Факт: ${grand} ч · ${norm > 0 ? Math.round(grand / norm * 100) : 0}%</div>`;
+    <div class="ts-norm-hint">Норма за месяц: ${norm} ч · Факт: ${grand} ч · ${norm > 0 ? Math.round(grand / norm * 100) : 0}%</div>
+    ${hasFlags ? `
+    <div class="ts-legend">
+      <div class="ts-legend-item"><span class="ts-legend-swatch ts-cell-overtime"></span>Переработка</div>
+      <div class="ts-legend-item"><span class="ts-legend-swatch ts-cell-dayoff"></span>Отработка невыхода</div>
+    </div>` : ''}`;
 }
 
 function _r2(n) { return Math.round(n * 100) / 100; }
@@ -2971,6 +2995,12 @@ function editReport(r) {
       <input class="edit-inp" type="date" id="editDate" value="${r.date||''}">
       <label class="edit-lbl">Комментарий</label>
       <textarea class="edit-inp" id="editComments" style="min-height:60px">${escapeHtml(r.comments||'')}</textarea>
+      <label class="edit-lbl">Признак времени</label>
+      <select class="edit-inp" id="editTimeType">
+        <option value=""${!r.time_type?' selected':''}>— обычное —</option>
+        <option value="overtime"${r.time_type==='overtime'?' selected':''}>Переработка (жёлтым)</option>
+        <option value="dayoff"${r.time_type==='dayoff'?' selected':''}>Отработка невыхода (синим)</option>
+      </select>
       <div class="edit-btns">
         <button class="edit-save" onclick="saveEdit()">Сохранить</button>
         <button class="edit-cancel" onclick="closeEdit()">Отмена</button>
@@ -2988,7 +3018,8 @@ async function saveEdit() {
       body: JSON.stringify({
         project:  document.getElementById('editProj').value,
         hours, date: document.getElementById('editDate').value,
-        comments: document.getElementById('editComments').value
+        comments: document.getElementById('editComments').value,
+        time_type: document.getElementById('editTimeType').value
       })
     });
     if (!resp.ok) throw new Error();

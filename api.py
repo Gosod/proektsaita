@@ -47,6 +47,15 @@ VACATIONS_FILE   = os.path.join(BASE_DIR, 'vacations.json')
 SPREADSHEET_ID   = os.environ.get('SPREADSHEET_ID', '')
 SHEET_REPORTS    = 'Отчёты'
 
+# ── ПРИЗНАК ВРЕМЕНИ (колонка G листа «Отчёты») ──
+# Админ выставляет при корректировке отчёта сотрудника; используется для
+# подсветки ячеек мини-табеля (жёлтый — переработка, синий — отработка невыхода).
+TIME_TYPE_LABELS = {
+    'overtime': 'Переработка',
+    'dayoff':   'Отработка невыхода',
+    '':         '',
+}
+
 ADMIN_IDS = [int(x) for x in os.environ.get('ADMIN_IDS', '699229724,924261386').split(',') if x.strip()]
 
 MSK              = pytz.timezone('Europe/Moscow')
@@ -225,8 +234,6 @@ app = Flask(__name__)
 CORS(app)
 
 # ── Security-заголовки (HSTS, CSP и т.п.) ──
-# CSP пока в режиме Report-Only — после проверки консоли на отсутствие
-# нарушений переименовать заголовок в Content-Security-Policy.
 _CSP_POLICY = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
@@ -341,6 +348,7 @@ def sheets_append(report: dict) -> bool:
         report.get('project', ''),
         _hours_for_sheets(report.get('hours', 0)),
         report.get('comments', ''),
+        '',  # Признак времени — выставляется админом позже при корректировке
     ]
 
     for attempt in range(1, SHEETS_RETRY + 1):
@@ -745,10 +753,20 @@ def init_data():
     return response
 
 
+def _normalize_time_type(raw: str) -> str:
+    """«Переработка» / «Отработка невыхода» (колонка G) → 'overtime' / 'dayoff' / ''."""
+    raw = (raw or '').strip().lower()
+    if 'переработ' in raw:
+        return 'overtime'
+    if 'отработ' in raw or 'невыход' in raw:
+        return 'dayoff'
+    return ''
+
+
 def _normalize_sheets_records(records: list, all_users: dict) -> list:
     """
     Преобразует строки из gspread (dict по заголовкам) в наш внутренний формат.
-    Ожидаемые заголовки: Дата, Время, Сотрудник, Проект, Часы, Комментарий
+    Ожидаемые заголовки: Дата, Время, Сотрудник, Проект, Часы, Комментарий, Признак времени
     """
     normalized = []
     # Строим обратный словарь username → user_id для обогащения
@@ -788,7 +806,8 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
                     hours = 0.0
             except (ValueError, TypeError):
                 hours = 0.0
-            comments = str(row.get('Комментарий', '') or row.get('comments', '')).strip()
+            comments  = str(row.get('Комментарий', '') or row.get('comments', '')).strip()
+            time_type = _normalize_time_type(str(row.get('Признак времени', '') or row.get('time_type', '')))
 
             # Дата: dd.mm.yyyy → yyyy-mm-dd
             try:
@@ -802,14 +821,15 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
             uid = uname_to_id.get(username.lower(), 0)
 
             normalized.append({
-                'id':       f'sheets_{i}',
-                'user_id':  uid,
-                'username': username,
-                'project':  project,
-                'hours':    hours,
-                'comments': comments,
-                'date':     date_iso,
-                'datetime': datetime_str,
+                'id':        f'sheets_{i}',
+                'user_id':   uid,
+                'username':  username,
+                'project':   project,
+                'hours':     hours,
+                'comments':  comments,
+                'date':      date_iso,
+                'datetime':  datetime_str,
+                'time_type': time_type,
             })
         except Exception as e:
             log.warning(f"Пропуск строки Sheets row={i}: {e}")
@@ -919,6 +939,7 @@ def user_timesheet():
 
     days_in_month = calendar.monthrange(year, month)[1]
     rows: dict = {}
+    cell_flags: dict = {}
     projects_set: set = set()
     for r in user_reports:
         date_str = r.get('date', '')
@@ -931,6 +952,10 @@ def user_timesheet():
         projects_set.add(proj)
         rows.setdefault(str(day), {})
         rows[str(day)][proj] = round(rows[str(day)].get(proj, 0) + hours, 2)
+        # Подсветка ячейки (переработка/отработка невыхода), выставляется
+        # админом при корректировке отчёта — см. TIME_TYPE_LABELS
+        if r.get('time_type'):
+            cell_flags.setdefault(str(day), {})[proj] = r['time_type']
 
     # Отпускные дни за этот месяц (только даты, без часов — для отметки в табеле)
     vacations     = load_json(VACATIONS_FILE, {})
@@ -955,6 +980,7 @@ def user_timesheet():
         'norm':          get_monthly_norm(urec, prefix),
         'projects':      sorted(projects_set),
         'rows':          rows,
+        'cell_flags':    cell_flags,       # {"5": {"Озон Кемерово": "overtime"}, ...}
         'vacation_days': vacation_days,   # ["3","10","11"] — просто список дней
         'off_days':      off_days,        # [1,2,9,...] или null (сб/вс по умолчанию)
     })
@@ -1106,6 +1132,9 @@ def update_report(report_id):
             sheet.update_cell(sheet_row, 4, data['project'])
         if 'comments' in data:
             sheet.update_cell(sheet_row, 6, data['comments'])
+        if 'time_type' in data:
+            time_type = data['time_type'] if data['time_type'] in TIME_TYPE_LABELS else ''
+            sheet.update_cell(sheet_row, 7, TIME_TYPE_LABELS[time_type])
 
         log.info(f"REPORT_UPDATED | report_id={report_id} | sheet_row={sheet_row}")
         return jsonify({'success': True, 'report_id': report_id})
