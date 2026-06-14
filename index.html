@@ -865,6 +865,10 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 ═══════════════════════════════════════════════════════ */
 @keyframes modalPopIn { from{opacity:0; transform:translateY(8px) scale(.97)} to{opacity:1; transform:translateY(0) scale(1)} }
 
+.app-shell { display:flex; min-height:100vh; }
+.sidebar { display:none; }
+.main { flex:1; min-width:0; }
+
 @media (min-width:768px) {
   .topbar, .tabs, .page { max-width:720px; margin-left:auto; margin-right:auto; }
 
@@ -895,8 +899,74 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 }
 
 @media (min-width:1024px) {
-  .topbar, .tabs, .page { max-width:960px; }
+  /* топбар и горизонтальные табы прячем — их заменяет сайдбар */
+  .topbar, .tabs { display:none !important; }
+
+  .page { padding:32px 40px; max-width:1400px; margin-left:0; margin-right:0; }
+  #report, #my-stats, #admin-create-report, #adminContent { max-width:640px; }
+  #adminContent:has(.dash-grid) { max-width:1400px; }
+  .sec-title { font-size:26px; }
+  .sec-sub { font-size:14px; }
   .chips-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
+
+  /* ─── САЙДБАР ─── */
+  .sidebar {
+    display:flex; flex-direction:column; gap:2px;
+    width:248px; flex-shrink:0; position:sticky; top:0; height:100vh;
+    background:var(--white); border-right:1px solid var(--border);
+    padding:18px 12px;
+  }
+  .sidebar-logo { display:flex; align-items:center; gap:10px; padding:6px 10px 18px; }
+  .sidebar-logo svg { height:22px; width:auto; }
+  .sidebar-logo-name { font-size:14px; font-weight:700; }
+  .sidebar-user {
+    display:flex; align-items:center; gap:10px; padding:10px;
+    margin-bottom:10px; border:1px solid var(--border); border-radius:var(--r);
+  }
+  .sidebar-avatar {
+    width:34px; height:34px; border-radius:50%; background:var(--blue-lt); color:var(--blue);
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0;
+  }
+  .sidebar-user-name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sidebar-user-role { font-size:11px; color:var(--muted); }
+
+  .nav-item {
+    display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:var(--r);
+    color:var(--muted); font:500 14px var(--font); text-decoration:none; cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  .nav-item:hover { background:var(--blue-lt); color:var(--blue); }
+  .nav-item.active { background:var(--blue-lt); color:var(--blue); font-weight:600; }
+  .nav-icon { font-size:18px; width:22px; text-align:center; flex-shrink:0; }
+
+  .sidebar-footer { margin-top:auto; display:flex; flex-direction:column; gap:4px; padding-top:10px; border-top:1px solid var(--border); }
+  .sidebar-footer .nav-item:hover { color:var(--danger); background:rgba(220,38,38,.08); }
+
+  /* ─── ДВУХКОЛОНОЧНЫЙ ДАШБОРД ─── */
+  .dash-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:24px; align-items:start; }
+  .dash-grid .tiles { grid-template-columns:repeat(3,1fr); gap:12px; }
+  #home .tiles { grid-template-columns:repeat(3,1fr); max-width:820px; }
+
+  .tile { padding:22px 20px; cursor:pointer; }
+  .tile:hover { border-color:var(--blue); background:var(--blue-lt); transform:translateY(-2px); }
+
+  .stat-grid { grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+  .stat-tile:hover { border-color:var(--blue); box-shadow:0 4px 14px rgba(0,105,210,.12); }
+
+  .page .btn { width:auto; display:inline-flex; align-items:center; justify-content:center; padding:11px 22px; cursor:pointer; }
+  .btn-primary:hover { opacity:.9; }
+  .btn-outline:hover { border-color:var(--blue); color:var(--blue); }
+
+  .rep-day-card:hover { border-color:var(--blue); }
+
+  /* ─── карусель проектов → сетка (мышь — не тач-жест) ─── */
+  .carousel-track {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    overflow:visible; scroll-snap-type:none;
+  }
+  .carousel-card { scroll-snap-align:unset; }
+  .carousel-card:hover { border-color:var(--blue); }
+  .carousel-nav, .carousel-dots { display:none; }
 }
 </style>
 </head>
@@ -992,6 +1062,50 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   </div>
 </div>
 
+
+<div class="app-shell">
+
+<!-- ═══ САЙДБАР (виден только на ≥1024px) ═══ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg viewBox="0 0 173 48" fill="var(--blue)" xmlns="http://www.w3.org/2000/svg">
+      <path d="M63.5189 20.5234H86.5V13.6823H63.5189V20.5234Z"/>
+      <path d="M63.5189 34.2047H86.5V27.3635H63.5189V34.2047Z"/>
+      <path d="M63.5189 47.8869H86.5V41.0458H63.5189V47.8869Z"/>
+      <path d="M86.5 13.6823H109.481V6.84119H86.5V13.6823Z"/>
+      <path d="M86.5 27.3635H109.481V20.5234H86.5V27.3635Z"/>
+      <path d="M86.5 41.0457H109.481V34.2046H86.5V41.0457Z"/>
+      <path d="M0.0509033 27.3635H63.5189V20.5234H0.0509033V27.3635Z"/>
+      <path d="M0.0509033 13.6823H63.5189V6.84119H0.0509033V13.6823Z"/>
+      <path d="M0.0509033 41.0457H63.5189V34.2046H0.0509033V41.0457Z"/>
+      <path d="M109.481 20.5234H172.949V13.6823H109.481V20.5234Z"/>
+      <path d="M109.481 6.84116H172.949V0H109.481V6.84116Z"/>
+      <path d="M109.481 34.2047H172.949V27.3635H109.481V34.2047Z"/>
+      <path d="M109.481 47.8869H172.949V41.0458H109.481V47.8869Z"/>
+    </svg>
+    <span class="sidebar-logo-name">ФМ Табель</span>
+  </div>
+
+  <div class="sidebar-user">
+    <div class="sidebar-avatar" id="sidebarAvatar">—</div>
+    <div style="min-width:0">
+      <div class="sidebar-user-name" id="sidebarUserName">...</div>
+      <div class="sidebar-user-role" id="sidebarUserRole">Сотрудник</div>
+    </div>
+  </div>
+
+  <a class="nav-item active" data-page="home" onclick="nav('home')"><span class="nav-icon">🏠</span>Главная</a>
+  <a class="nav-item" data-page="report" onclick="nav('report')"><span class="nav-icon">📝</span>Отчёт</a>
+  <a class="nav-item" data-page="my-stats" onclick="nav('my-stats')"><span class="nav-icon">📊</span>Статистика</a>
+  <a class="nav-item admin-only" data-page="admin-panel" style="display:none" onclick="nav('admin-panel')"><span class="nav-icon">⚙️</span>Управление</a>
+
+  <div class="sidebar-footer">
+    <a class="nav-item" onclick="toggleTheme(event)"><span class="nav-icon theme-icon">☀️</span>Тёмная тема</a>
+    <a class="nav-item" onclick="doLogout()"><span class="nav-icon">↪</span>Выйти</a>
+  </div>
+</aside>
+
+<div class="main">
 
 <!-- TOPBAR -->
 <div class="topbar" id="topbar" style="display:none">
@@ -1226,6 +1340,9 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   </div>
 </div>
 
+</div><!-- /.main -->
+</div><!-- /.app-shell -->
+
 <script>
 // ══════════════════════════════════════════════════════
 // INIT
@@ -1272,8 +1389,18 @@ function escapeHtml(str) {
 // ══════════════════════════════════════════════════════
 function syncThemeIcon() {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const icon = document.querySelector('#themeToggle .theme-icon');
-  if (icon) icon.textContent = dark ? '🌙' : '☀️';
+  document.querySelectorAll('.theme-icon').forEach(icon => icon.textContent = dark ? '🌙' : '☀️');
+}
+
+// Заполняет блок пользователя в сайдбаре (десктоп)
+function setSidebarUser(name, isAdmin) {
+  const initials = (name||'').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+  const av   = document.getElementById('sidebarAvatar');
+  const nm   = document.getElementById('sidebarUserName');
+  const role = document.getElementById('sidebarUserRole');
+  if (av)   av.textContent = initials || '?';
+  if (nm)   nm.textContent = name;
+  if (role) role.textContent = isAdmin ? 'Администратор' : 'Сотрудник';
 }
 
 
@@ -1330,10 +1457,9 @@ function nav(page, addHistory=true) {
   const cur = document.querySelector('.page.active');
   if (cur && addHistory && cur.id !== page) S.navHistory.push(cur.id);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab, .nav-item').forEach(b => b.classList.remove('active'));
   document.getElementById(page).classList.add('active');
-  const btn = document.querySelector(`.tab[data-page="${page}"]`);
-  if (btn) btn.classList.add('active');
+  document.querySelectorAll(`.tab[data-page="${page}"], .nav-item[data-page="${page}"]`).forEach(b => b.classList.add('active'));
   window.scrollTo(0,0);
   S.navHistory.length ? tg.BackButton.show() : tg.BackButton.hide();
   // Рендерим активную под-вкладку при заходе в админ-панель
@@ -1376,6 +1502,7 @@ async function loadData() {
   if (data.display_name) localStorage.setItem('phm_display', data.display_name);
   document.getElementById('topbarName').textContent = display;
   document.getElementById('homeSub').textContent = display;
+  setSidebarUser(display, S.admin);
 
   if (S.admin) {
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
@@ -2150,58 +2277,64 @@ function renderAdminOverview() {
   if (S.projChart) { S.projChart.destroy(); S.projChart = null; }
 
   el.innerHTML = `
-    <div class="stat-grid">
-      <div class="stat-tile"><div class="stat-val">${s.total_hours}</div><div class="stat-lbl">Часов всего</div></div>
-      <div class="stat-tile"><div class="stat-val">${s.total_reports}</div><div class="stat-lbl">Отчётов</div></div>
-    </div>
-    <div class="stat-grid">
-      <div class="stat-tile"><div class="stat-val">${s.employees?.length||0}</div><div class="stat-lbl">Сотрудников</div></div>
-      <div class="stat-tile"><div class="stat-val">${Object.keys(s.projects||{}).length}</div><div class="stat-lbl">Проектов</div></div>
-    </div>
+    <div class="dash-grid">
+      <div>
+        <div class="stat-grid">
+          <div class="stat-tile"><div class="stat-val">${s.total_hours}</div><div class="stat-lbl">Часов всего</div></div>
+          <div class="stat-tile"><div class="stat-val">${s.total_reports}</div><div class="stat-lbl">Отчётов</div></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-tile"><div class="stat-val">${s.employees?.length||0}</div><div class="stat-lbl">Сотрудников</div></div>
+          <div class="stat-tile"><div class="stat-val">${Object.keys(s.projects||{}).length}</div><div class="stat-lbl">Проектов</div></div>
+        </div>
 
-    <!-- Диаграмма по сотрудникам — видна сразу -->
-    <div class="chart-wrap" style="margin-top:12px"><canvas id="overviewChart"></canvas></div>
+        <!-- Диаграмма по сотрудникам — видна сразу -->
+        <div class="chart-wrap" style="margin-top:12px"><canvas id="overviewChart"></canvas></div>
+      </div>
 
-    <!-- Часы по сотрудникам — в аккордеоне -->
-    <div class="ov-acc">
-      <div class="ov-acc-head" onclick="toggleOvAcc('empListAcc', this)">
-        <span class="ov-acc-title">👥 Часы по сотрудникам (${empSorted.length})</span>
-        <span class="ov-acc-arrow">›</span>
-      </div>
-      <div class="ov-acc-body" id="empListAcc">
-        ${empSorted.map(e=>`
-          <div class="emp-card">
-            <div class="emp-head">
-              <div class="emp-name">${e.username||'?'}</div>
-              <div class="emp-hours">${e.hours} ч</div>
-            </div>
-            <div class="emp-meta">Отчётов: ${e.reports}</div>
-            ${Object.entries(e.projects||{}).map(([p,h])=>`
-              <div class="emp-proj"><span class="emp-proj-nm">${p}</span><span>${h} ч</span></div>`).join('')}
-          </div>`).join('')}
-      </div>
-    </div>
+      <div>
+        <!-- Часы по сотрудникам — в аккордеоне -->
+        <div class="ov-acc">
+          <div class="ov-acc-head" onclick="toggleOvAcc('empListAcc', this)">
+            <span class="ov-acc-title">👥 Часы по сотрудникам (${empSorted.length})</span>
+            <span class="ov-acc-arrow">›</span>
+          </div>
+          <div class="ov-acc-body" id="empListAcc">
+            ${empSorted.map(e=>`
+              <div class="emp-card">
+                <div class="emp-head">
+                  <div class="emp-name">${e.username||'?'}</div>
+                  <div class="emp-hours">${e.hours} ч</div>
+                </div>
+                <div class="emp-meta">Отчётов: ${e.reports}</div>
+                ${Object.entries(e.projects||{}).map(([p,h])=>`
+                  <div class="emp-proj"><span class="emp-proj-nm">${p}</span><span>${h} ч</span></div>`).join('')}
+              </div>`).join('')}
+          </div>
+        </div>
 
-    <!-- Диаграмма по проектам — в аккордеоне -->
-    <div class="ov-acc">
-      <div class="ov-acc-head" onclick="toggleOvAcc('projChartAcc', this)">
-        <span class="ov-acc-title">📊 Диаграмма по проектам</span>
-        <span class="ov-acc-arrow">›</span>
-      </div>
-      <div class="ov-acc-body" id="projChartAcc">
-        <div class="chart-wrap" style="margin:0"><canvas id="projChart"></canvas></div>
-      </div>
-    </div>
+        <!-- Диаграмма по проектам — в аккордеоне -->
+        <div class="ov-acc">
+          <div class="ov-acc-head" onclick="toggleOvAcc('projChartAcc', this)">
+            <span class="ov-acc-title">📊 Диаграмма по проектам</span>
+            <span class="ov-acc-arrow">›</span>
+          </div>
+          <div class="ov-acc-body" id="projChartAcc">
+            <div class="chart-wrap" style="margin:0"><canvas id="projChart"></canvas></div>
+          </div>
+        </div>
 
-    <!-- Список проектов с часами — в аккордеоне -->
-    <div class="ov-acc">
-      <div class="ov-acc-head" onclick="toggleOvAcc('projListAcc', this)">
-        <span class="ov-acc-title">📁 Часы по проектам (${projSorted.length})</span>
-        <span class="ov-acc-arrow">›</span>
-      </div>
-      <div class="ov-acc-body" id="projListAcc">
-        ${projSorted.map(([p,h])=>`
-          <div class="proj-stat-row"><span class="proj-stat-name">${p}</span><span class="proj-stat-hrs">${h} ч</span></div>`).join('')}
+        <!-- Список проектов с часами — в аккордеоне -->
+        <div class="ov-acc">
+          <div class="ov-acc-head" onclick="toggleOvAcc('projListAcc', this)">
+            <span class="ov-acc-title">📁 Часы по проектам (${projSorted.length})</span>
+            <span class="ov-acc-arrow">›</span>
+          </div>
+          <div class="ov-acc-body" id="projListAcc">
+            ${projSorted.map(([p,h])=>`
+              <div class="proj-stat-row"><span class="proj-stat-name">${p}</span><span class="proj-stat-hrs">${h} ч</span></div>`).join('')}
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -3423,6 +3556,7 @@ async function init() {
     if (displayName) localStorage.setItem('phm_display', displayName);
     document.getElementById('topbarName').textContent = displayName;
     document.getElementById('homeSub').textContent    = displayName;
+    setSidebarUser(displayName, S.admin);
     if (S.admin) {
       document.querySelectorAll('.admin-only').forEach(el => el.style.display='');
       document.getElementById('topbarBadge').style.display='';
