@@ -43,18 +43,15 @@ USER_PROJECTS_FILE = os.path.join(BASE_DIR, 'user_projects.json')
 CREDENTIALS_FILE = os.path.join(BASE_DIR, 'credentials.json')
 REPORTS_LOCAL_FILE = os.path.join(BASE_DIR, 'reports_local.json')
 VACATIONS_FILE   = os.path.join(BASE_DIR, 'vacations.json')
+REPORT_FLAGS_FILE = os.path.join(BASE_DIR, 'report_flags.json')
 
 SPREADSHEET_ID   = os.environ.get('SPREADSHEET_ID', '')
 SHEET_REPORTS    = 'Отчёты'
 
-# ── ПРИЗНАК ВРЕМЕНИ (колонка G листа «Отчёты») ──
+# ── ПРИЗНАК ВРЕМЕНИ (report_flags.json) ──
 # Админ выставляет при корректировке отчёта сотрудника; используется для
 # подсветки ячеек мини-табеля (жёлтый — переработка, синий — отработка невыхода).
-TIME_TYPE_LABELS = {
-    'overtime': 'Переработка',
-    'dayoff':   'Отработка невыхода',
-    '':         '',
-}
+TIME_TYPES = {'overtime', 'dayoff'}
 
 ADMIN_IDS = [int(x) for x in os.environ.get('ADMIN_IDS', '699229724,924261386').split(',') if x.strip()]
 
@@ -348,7 +345,6 @@ def sheets_append(report: dict) -> bool:
         report.get('project', ''),
         _hours_for_sheets(report.get('hours', 0)),
         report.get('comments', ''),
-        '',  # Признак времени — выставляется админом позже при корректировке
     ]
 
     for attempt in range(1, SHEETS_RETRY + 1):
@@ -753,24 +749,17 @@ def init_data():
     return response
 
 
-def _normalize_time_type(raw: str) -> str:
-    """«Переработка» / «Отработка невыхода» (колонка G) → 'overtime' / 'dayoff' / ''."""
-    raw = (raw or '').strip().lower()
-    if 'переработ' in raw:
-        return 'overtime'
-    if 'отработ' in raw or 'невыход' in raw:
-        return 'dayoff'
-    return ''
-
-
 def _normalize_sheets_records(records: list, all_users: dict) -> list:
     """
     Преобразует строки из gspread (dict по заголовкам) в наш внутренний формат.
-    Ожидаемые заголовки: Дата, Время, Сотрудник, Проект, Часы, Комментарий, Признак времени
+    Ожидаемые заголовки: Дата, Время, Сотрудник, Проект, Часы, Комментарий
     """
     normalized = []
     # Строим обратный словарь username → user_id для обогащения
     uname_to_id = {v.get('username', '').lower(): int(k) for k, v in all_users.items()}
+    # Признаки времени (переработка/отработка невыхода), выставленные админом
+    # при корректировке отчёта — report_flags.json: {uid: {date: {project: type}}}
+    report_flags = load_json(REPORT_FLAGS_FILE, {})
     # Ники тестовых сотрудников — их строки исключаем из статистики/отчётов
     test_unames = {
         str(v.get('username', '')).lower()
@@ -806,8 +795,7 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
                     hours = 0.0
             except (ValueError, TypeError):
                 hours = 0.0
-            comments  = str(row.get('Комментарий', '') or row.get('comments', '')).strip()
-            time_type = _normalize_time_type(str(row.get('Признак времени', '') or row.get('time_type', '')))
+            comments = str(row.get('Комментарий', '') or row.get('comments', '')).strip()
 
             # Дата: dd.mm.yyyy → yyyy-mm-dd
             try:
@@ -819,6 +807,7 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
                 datetime_str = f"{date_raw} {time_raw}".strip()
 
             uid = uname_to_id.get(username.lower(), 0)
+            time_type = report_flags.get(str(uid), {}).get(date_iso, {}).get(project, '')
 
             normalized.append({
                 'id':        f'sheets_{i}',
@@ -1133,8 +1122,34 @@ def update_report(report_id):
         if 'comments' in data:
             sheet.update_cell(sheet_row, 6, data['comments'])
         if 'time_type' in data:
-            time_type = data['time_type'] if data['time_type'] in TIME_TYPE_LABELS else ''
-            sheet.update_cell(sheet_row, 7, TIME_TYPE_LABELS[time_type])
+            time_type = data['time_type'] if data['time_type'] in TIME_TYPES else ''
+            row_vals = records[sheet_row - 1]
+            username = row_vals[2].strip() if len(row_vals) > 2 else ''
+            all_users   = load_json(USERS_FILE, {})
+            uname_to_id = {v.get('username', '').lower(): int(k) for k, v in all_users.items()}
+            uid = uname_to_id.get(username.lower())
+            if uid is not None:
+                if 'date' in data:
+                    date_iso = data['date']
+                else:
+                    try:
+                        date_iso = datetime.strptime(row_vals[0], '%d.%m.%Y').strftime('%Y-%m-%d')
+                    except Exception:
+                        date_iso = row_vals[0]
+                project = data.get('project', row_vals[3] if len(row_vals) > 3 else '')
+
+                flags = load_json(REPORT_FLAGS_FILE, {})
+                uid_flags  = flags.setdefault(str(uid), {})
+                date_flags = uid_flags.setdefault(date_iso, {})
+                if time_type:
+                    date_flags[project] = time_type
+                else:
+                    date_flags.pop(project, None)
+                    if not date_flags:
+                        uid_flags.pop(date_iso, None)
+                    if not uid_flags:
+                        flags.pop(str(uid), None)
+                save_json(REPORT_FLAGS_FILE, flags)
 
         log.info(f"REPORT_UPDATED | report_id={report_id} | sheet_row={sheet_row}")
         return jsonify({'success': True, 'report_id': report_id})
