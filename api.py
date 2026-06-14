@@ -82,14 +82,6 @@ def verify_password(password: str, stored: str) -> bool:
     except Exception:
         return False
 
-def hash_pin(pin: str) -> str:
-    salt = secrets.token_hex(16)
-    h = hashlib.sha256((salt + pin).encode()).hexdigest()
-    return f"{salt}:{h}"
-
-def verify_pin(pin: str, stored: str) -> bool:
-    return verify_password(pin, stored)
-
 def make_token(user_id: str, username: str) -> str:
     """Простой JWT-подобный токен без внешних зависимостей."""
     payload = {
@@ -586,7 +578,6 @@ def register():
         'username':     username,
         'display_name': users[uid].get('display_name', username),
         'admin':        is_admin(uid),
-        'need_pin':     True,
     })
 
 
@@ -623,78 +614,7 @@ def login():
         'username':     username,
         'display_name': users[uid].get('display_name', username),
         'admin':        is_admin(uid),
-        'need_pin':     not bool(users[uid].get('pin_hash')),
     })
-
-
-@app.route('/api/auth/set-pin', methods=['POST'])
-@auth_required
-def set_pin():
-    """Установка PIN после входа."""
-    data = request.get_json(silent=True) or {}
-    pin  = str(data.get('pin', '')).strip()
-
-    if len(pin) != 4 or not pin.isdigit():
-        return jsonify({'error': 'PIN — 4 цифры'}), 400
-
-    uid   = request.current_user['uid']
-    users = load_json(USERS_FILE, {})
-    if uid not in users:
-        return jsonify({'error': 'Пользователь не найден'}), 404
-
-    users[uid]['pin_hash'] = hash_pin(pin)
-    save_json(USERS_FILE, users)
-
-    log.info(f"AUTH_SET_PIN | uid={uid}")
-    return jsonify({'success': True})
-
-
-@app.route('/api/auth/verify-pin', methods=['POST'])
-def verify_pin_endpoint():
-    """Вход по PIN-коду."""
-    data = request.get_json(silent=True) or {}
-    uid  = str(data.get('user_id', ''))
-    pin  = str(data.get('pin', '')).strip()
-
-    if not uid or not pin:
-        return jsonify({'error': 'user_id и pin обязательны'}), 400
-
-    users = load_json(USERS_FILE, {})
-    if uid not in users:
-        return jsonify({'error': 'Пользователь не найден'}), 404
-
-    stored = users[uid].get('pin_hash')
-    if not stored:
-        return jsonify({'error': 'PIN не установлен'}), 400
-
-    if not verify_pin(pin, stored):
-        log.warning(f"PIN_FAIL | uid={uid}")
-        return jsonify({'error': 'Неверный PIN'}), 401
-
-    username = users[uid].get('username', '')
-    token    = make_token(uid, username)
-
-    log.info(f"AUTH_PIN_OK | uid={uid} | username={username}")
-    return jsonify({
-        'success':      True,
-        'token':        token,
-        'user_id':      int(uid),
-        'username':     username,
-        'display_name': users[uid].get('display_name', username),
-        'admin':        is_admin(uid),
-    })
-
-
-@app.route('/api/auth/reset-pin', methods=['POST'])
-@auth_required
-def reset_pin():
-    """Сброс PIN (после входа по паролю)."""
-    uid   = request.current_user['uid']
-    users = load_json(USERS_FILE, {})
-    if uid in users:
-        users[uid]['pin_hash'] = None
-        save_json(USERS_FILE, users)
-    return jsonify({'success': True})
 
 
 # ── INIT ─────────────────────────────────────────────
@@ -1344,7 +1264,6 @@ def admin_employees():
             'username':      u.get('username', ''),
             'display_name':  u.get('display_name', u.get('username', '')),
             'registered':    bool(u.get('password_hash')),
-            'has_pin':       bool(u.get('pin_hash')),
             'invite_code':   u.get('invite_code'),
             'invite_used':   bool(u.get('invite_used', False)),
             'is_test':       bool(u.get('is_test', False)),
@@ -1389,7 +1308,6 @@ def admin_employee_add():
         'registered_at': '',
         'status':        'active',
         'password_hash': None,
-        'pin_hash':      None,
         'invite_code':   None,
         'invite_used':   False,
     }
@@ -1460,7 +1378,6 @@ def admin_employee_reset():
     if uid not in users:
         return jsonify({'error': 'Пользователь не найден'}), 404
     users[uid]['password_hash'] = None
-    users[uid]['pin_hash']      = None
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
     log.info(f"ADMIN_EMP_RESET | by={request.current_user.get('uid')} | uid={uid}")

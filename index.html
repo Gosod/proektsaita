@@ -1361,7 +1361,7 @@ const S = {
   projects: [], allProjects: [], allUsers: [],
   userStats: {}, adminStats: null,
   monthly_norm: 160,
-  selectedProject: null, currentHours: 4,
+  selectedProject: null,
   reportItems: [],
   navHistory: [],
   adminReportProjects: [], adminSelectedProject: null,
@@ -1738,42 +1738,6 @@ function buildChips() {
 }
 
 // ══════════════════════════════════════════════════════
-// HOURS
-// ══════════════════════════════════════════════════════
-function initHoursSlider() {
-  document.querySelectorAll('.quick[data-h]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const h = parseFloat(btn.dataset.h);
-      setHours(h); haptic('light');
-    });
-  });
-}
-
-function setHours(v) {
-  v = Math.max(0, Math.min(24, Math.round(v * 10) / 10));
-  S.currentHours = v;
-  const num = document.getElementById('hoursNum');
-  const rng = document.getElementById('hoursRange');
-  if (num) num.value = v;
-  if (rng) rng.value = v;
-  highlightQuick(v);
-  updateSummary(); updateTotal();
-}
-
-function highlightQuick(v) {
-  document.querySelectorAll('.quick[data-h]').forEach(b =>
-    b.classList.toggle('active', parseFloat(b.dataset.h) === v)
-  );
-}
-
-function updateTotal() {
-  const extra = S.selectedProject ? S.currentHours : 0;
-  const t = S.reportItems.reduce((s,i) => s + i.hours, 0) + extra;
-  const el = document.getElementById('totalH');
-  if (el) el.textContent = +t.toFixed(2);
-}
-
-// ══════════════════════════════════════════════════════
 // ADD / REMOVE PROJECT
 // ══════════════════════════════════════════════════════
 function addProject() {
@@ -1873,7 +1837,6 @@ function renderCarousel() {
     track.scrollLeft += e.deltaY;
     e.preventDefault();
   };
-  updateTotal();
 }
 
 function carouselScroll(dir) {
@@ -1929,7 +1892,6 @@ function setCardHours(idx, h) {
 
 function updateSummary() {
   const all = [...S.reportItems];
-  if (S.selectedProject) all.push({project: S.selectedProject.full, hours: S.currentHours});
   const sw = document.getElementById('summaryWrap');
   if (!all.length) { sw.style.display='none'; return; }
   sw.style.display = 'block';
@@ -1942,7 +1904,6 @@ function updateSummary() {
   document.getElementById('summaryTotal').textContent = +sum.toFixed(2) + ' ч';
   document.getElementById('commentWrap').style.display = 'block';
   document.getElementById('submitBtn').style.display   = 'block';
-  updateTotal();
 }
 
 // ══════════════════════════════════════════════════════
@@ -2178,14 +2139,11 @@ function buildTimesheetTable(data) {
     }
   }
 
-  // Обед/перерывы — 1ч за каждый рабочий день
+  // Обед/перерывы — 1ч за каждый рабочий день. Не оплачивается и НЕ входит
+  // в норму, поэтому показывается отдельной строкой, но не добавляется в
+  // дневной/общий итог и в «Факт» (иначе расходится с прогресс-баром на главной).
   const lunchDays = new Set(Object.keys(rows).map(Number));
-  let lunchTotal = 0;
-  lunchDays.forEach(d => {
-    totByDay[d] = _r2((totByDay[d] || 0) + 1);
-    grand        = _r2(grand + 1);
-    lunchTotal++;
-  });
+  const lunchTotal = lunchDays.size;
 
   const days = Array.from({length: days_in_month}, (_, i) => i + 1);
   const wkCls = d => weekends.has(d) ? ' class="ts-weekend"' : '';
@@ -3371,7 +3329,7 @@ function saveAuth(data) {
 
 function clearAuth() {
   _authBusy = false;
-  ['phm_token','phm_uid','phm_uname','phm_pin_set','phm_display'].forEach(k => localStorage.removeItem(k));
+  ['phm_token','phm_uid','phm_uname','phm_display'].forEach(k => localStorage.removeItem(k));
   AUTH.token = AUTH.userId = AUTH.username = null;
 }
 
@@ -3576,7 +3534,6 @@ async function init() {
     S.projects=[]; S.allProjects=[];
   }
 
-  initHoursSlider();
   initNavBtns();
   renderStats();
   buildCategories();
