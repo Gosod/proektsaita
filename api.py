@@ -224,6 +224,31 @@ log = logging.getLogger('phm_api')
 app = Flask(__name__)
 CORS(app)
 
+# ── Security-заголовки (HSTS, CSP и т.п.) ──
+# CSP пока в режиме Report-Only — после проверки консоли на отсутствие
+# нарушений переименовать заголовок в Content-Security-Policy.
+_CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'self'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
+@app.after_request
+def _security_headers(response):
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    response.headers['Content-Security-Policy-Report-Only'] = _CSP_POLICY
+    return response
+
 # ── Локальная отдача статики (index.html / manifest.json) ──
 from flask import send_from_directory
 
@@ -235,6 +260,10 @@ def _serve_index():
 @app.route('/manifest.json')
 def _serve_manifest():
     return send_from_directory(BASE_DIR, 'manifest.json')
+
+@app.route('/.well-known/security.txt')
+def _serve_security_txt():
+    return send_from_directory(BASE_DIR, 'security.txt')
 
 # Иконки и фон — если файла нет, тихий 204 вместо 404 в логах
 @app.route('/favicon.ico')

@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ФМ Табель — учёт рабочего времени и отчётов сотрудников Фотомеханики">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -13,8 +14,9 @@
 <meta name="apple-mobile-web-app-title" content="ФМ Табель">
 <link rel="manifest" href="/manifest.json">
 <title>ФМ Табель — Фотомеханика</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
   // Применяем сохранённую тему до отрисовки (без вспышки). Старт всегда светлый, если не сохранено иное.
@@ -31,7 +33,7 @@
   --surface: #ffffff;
   --surface-glass: rgba(255,255,255,0.82);
   --text:    #0d1117;
-  --muted:   #6B7280;
+  --muted:   #676E7C;
   --border:  #E5E7EB;
   --danger:  #DC2626;
   --success: #16A34A;
@@ -915,7 +917,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
     <div class="auth-title">Добро пожаловать</div>
     <div class="auth-sub">Выберите имя, введите код от администратора и придумайте пароль</div>
     <div class="auth-field">
-      <label class="auth-label">Сотрудник</label>
+      <label class="auth-label" for="regUserId">Сотрудник</label>
       <select class="auth-input" id="regUserId" onchange="onRegUserChange()">
         <option value="">— Выберите себя —</option>
       </select>
