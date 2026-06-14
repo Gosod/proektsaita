@@ -246,7 +246,7 @@ def _security_headers(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
-    response.headers['Content-Security-Policy-Report-Only'] = _CSP_POLICY
+    response.headers['Content-Security-Policy'] = _CSP_POLICY
     return response
 
 # ── Локальная отдача статики (index.html / manifest.json) ──

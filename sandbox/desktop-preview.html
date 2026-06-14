@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ФМ Табель — десктоп-превью (sandbox)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════
+   ТОКЕНЫ — скопированы из index.html без изменений
+   ════════════════════════════════════════════════════════ */
+:root {
+  --blue:    #0069D2;
+  --blue-lt: #E8F2FB;
+  --white:   #ffffff;
+  --bg:      #F4F6F9;
+  --surface: #ffffff;
+  --text:    #0d1117;
+  --muted:   #676E7C;
+  --border:  #E5E7EB;
+  --danger:  #DC2626;
+  --success: #16A34A;
+  --r:       12px;
+  --font:    'Golos Text', system-ui, sans-serif;
+  --ease:    cubic-bezier(.4,0,.2,1);
+  --shadow:  0 1px 4px rgba(0,0,0,.07);
+}
+
+*,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:var(--font); color:var(--text);
+  min-height:100vh; font-size:14px; line-height:1.5;
+  background:var(--bg);
+}
+button { font-family:var(--font); cursor:pointer; }
+
+/* ════════════════════════════════════════════════════════
+   МОБИЛЬНЫЙ КАРКАС (как сейчас в index.html) — без изменений
+   ════════════════════════════════════════════════════════ */
+.topbar {
+  position:sticky; top:0; z-index:100;
+  background:var(--white); border-bottom:1px solid var(--border);
+  height:52px; padding:0 16px; display:flex; align-items:center; gap:10px;
+}
+.topbar-logo svg { height:20px; width:auto; }
+.topbar-sep { width:1px; height:18px; background:var(--border); flex-shrink:0; }
+.topbar-name { font-size:13px; font-weight:600; flex:1; }
+.topbar-badge { font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; background:var(--blue-lt); color:var(--blue); }
+
+.tabs {
+  background:var(--white); border-bottom:1px solid var(--border);
+  display:flex; padding:0 16px; overflow-x:auto; scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar { display:none; }
+.tab {
+  padding:12px 14px; border:none; background:transparent;
+  color:var(--muted); font:500 13px var(--font);
+  white-space:nowrap; flex-shrink:0; position:relative; transition:color .2s var(--ease);
+}
+.tab::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
+  background:var(--blue); border-radius:2px 2px 0 0; transform:scaleX(0); transition:transform .2s var(--ease);
+}
+.tab.active { color:var(--text); }
+.tab.active::after { transform:scaleX(1); }
+
+.page { display:none; padding:16px; }
+.page.active { display:block; }
+
+.sec-head { margin-bottom:16px; }
+.sec-title { font-size:18px; font-weight:700; letter-spacing:-.3px; }
+.sec-sub { font-size:13px; color:var(--muted); margin-top:2px; }
+.section-divider {
+  font-size:13px; font-weight:700; color:var(--text);
+  margin:18px 0 12px; padding-bottom:8px; border-bottom:2px solid var(--blue);
+}
+.dash-grid > .section-divider:first-child,
+.dash-grid > div > .section-divider:first-child { margin-top:0; }
+
+/* ─── CARD / TILES / BTN — без изменений ─── */
+.card { background:var(--surface); border-radius:var(--r); border:1px solid var(--border); box-shadow:var(--shadow); overflow:hidden; }
+.card+.card { margin-top:8px; }
+.card-row { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; }
+.card-row+.card-row { border-top:1px solid var(--border); }
+.card-label { font-size:13px; color:var(--muted); }
+.card-value { font-size:22px; font-weight:700; color:var(--blue); }
+
+.tiles { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+.tile {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+  padding:18px 16px; box-shadow:var(--shadow); transition:border-color .15s,transform .12s,background .15s;
+}
+.tile:active { transform:scale(.97); border-color:var(--blue); background:var(--blue-lt); }
+.tile-icon { font-size:24px; margin-bottom:10px; }
+.tile-title { font-size:14px; font-weight:600; }
+.tile-desc { font-size:12px; color:var(--muted); margin-top:2px; line-height:1.4; }
+
+.btn {
+  width:100%; padding:13px; border:none; border-radius:var(--r);
+  font:600 14px var(--font); margin-top:8px; transition:opacity .15s,transform .1s,background .15s,border-color .15s;
+}
+.btn:active { transform:scale(.98); opacity:.85; }
+.btn-primary { background:var(--blue); color:#fff; }
+.btn-outline { background:transparent; color:var(--text); border:1.5px solid var(--border); }
+
+/* ─── MONTH PROGRESS ─── */
+.month-progress { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px 16px; margin-bottom:12px; box-shadow:var(--shadow); }
+.month-prog-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+.month-prog-title { font-size:13px; font-weight:600; }
+.month-prog-nums { font-size:13px; color:var(--muted); }
+.month-bar-bg { height:8px; background:var(--border); border-radius:4px; overflow:hidden; }
+.month-bar-fill { height:100%; background:var(--blue); border-radius:4px; }
+.month-prog-foot { font-size:11px; color:var(--muted); margin-top:5px; }
+
+/* ─── STAT TILES ─── */
+.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+.stat-tile { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:16px; box-shadow:var(--shadow); transition:border-color .15s; }
+.stat-val { font-size:28px; font-weight:700; color:var(--blue); line-height:1; }
+.stat-lbl { font-size:12px; color:var(--muted); margin-top:4px; }
+
+/* ─── ОТЧЁТЫ (карточки дня) ─── */
+.rep-day-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:10px; }
+.rep-day-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+.rep-day-name { font-size:14px; font-weight:700; }
+.rep-day-date { font-size:12px; color:var(--muted); }
+.rep-day-total { font-size:13px; font-weight:600; color:var(--blue); }
+.rep-proj-line { display:flex; align-items:center; justify-content:space-between; padding:7px 0; gap:10px; }
+.rep-proj-line + .rep-proj-line { border-top:1px solid rgba(0,0,0,0.04); }
+.rep-proj-nm { font-size:13px; }
+.rep-proj-hrs { font-size:13px; font-weight:600; color:var(--blue); flex-shrink:0; }
+
+/* ─── КАРУСЕЛЬ ПРОЕКТОВ (мобильная версия, как в index.html) ─── */
+.carousel-wrap { position:relative; }
+.carousel-track {
+  display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch; scrollbar-width:none; padding:2px;
+}
+.carousel-track::-webkit-scrollbar { display:none; }
+.carousel-card {
+  flex:0 0 78%; scroll-snap-align:center; background:var(--surface);
+  border:1.5px solid var(--border); border-radius:var(--r); padding:14px;
+}
+.carousel-card.active-card { border-color:var(--blue); }
+.carousel-card-abbr { font-size:12px; font-weight:700; color:var(--blue); letter-spacing:.5px; }
+.carousel-card-fullname { font-size:13px; color:var(--muted); margin-top:4px; line-height:1.4; }
+.carousel-card-hrs { font-size:18px; font-weight:700; margin-top:10px; }
+.carousel-dots { display:flex; justify-content:center; gap:5px; margin-top:8px; }
+.carousel-dot { width:6px; height:6px; border-radius:50%; background:var(--border); }
+.carousel-dot.active { background:var(--blue); width:16px; border-radius:3px; }
+.carousel-nav { display:none; }
+
+/* ─── ПРОСТОЙ MOCK-ГРАФИК ─── */
+.mock-chart { display:flex; align-items:flex-end; gap:14px; height:160px; padding:10px 4px 0; }
+.mock-bar { flex:1; background:var(--blue-lt); border:1.5px solid var(--blue); border-radius:6px 6px 0 0; position:relative; transition:border-color .15s, background .15s; }
+.mock-bar-lbl { position:absolute; bottom:-20px; left:0; right:0; text-align:center; font-size:10px; color:var(--muted); white-space:nowrap; transform:rotate(-20deg); transform-origin:top center; }
+.mock-chart-wrap { padding-bottom:24px; }
+
+/* ─── индикатор текущего режима (только для превью) ─── */
+.mode-badge {
+  position:fixed; right:12px; bottom:12px; z-index:999;
+  background:var(--text); color:var(--white); font:600 11px var(--font);
+  padding:6px 12px; border-radius:20px; opacity:.85; pointer-events:none;
+}
+.mode-badge::after { content:'📱 Мобильный layout · < 1024px'; }
+
+
+/* ════════════════════════════════════════════════════════
+   НОВОЕ — ДЕСКТОП-РЕСКИН (≥1024px)
+   Двухколоночный layout: боковая навигация + расширенный
+   контент в 2 колонки. Ниже 1024px — всё как в текущем
+   мобильном приложении (топбар + горизонтальные табы,
+   карусель проектов со свайпом, 1 колонка).
+   ════════════════════════════════════════════════════════ */
+.app-shell { display:flex; min-height:100vh; }
+.sidebar { display:none; }
+.main { flex:1; min-width:0; }
+
+@media (min-width:1024px) {
+  .mode-badge::after { content:'🖥️ Десктоп layout · ≥ 1024px'; }
+
+  /* топбар и горизонтальные табы прячем — их заменяет сайдбар */
+  .topbar, .tabs { display:none; }
+
+  .sidebar {
+    display:flex; flex-direction:column; gap:2px;
+    width:248px; flex-shrink:0; position:sticky; top:0; height:100vh;
+    background:var(--white); border-right:1px solid var(--border);
+    padding:18px 12px;
+  }
+  .sidebar-logo { display:flex; align-items:center; gap:10px; padding:6px 10px 18px; }
+  .sidebar-logo svg { height:22px; width:auto; }
+  .sidebar-logo-name { font-size:14px; font-weight:700; }
+  .sidebar-user {
+    display:flex; align-items:center; gap:10px; padding:10px;
+    margin-bottom:10px; border:1px solid var(--border); border-radius:var(--r);
+  }
+  .sidebar-avatar {
+    width:34px; height:34px; border-radius:50%; background:var(--blue-lt); color:var(--blue);
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0;
+  }
+  .sidebar-user-name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sidebar-user-role { font-size:11px; color:var(--muted); }
+
+  .nav-item {
+    display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:var(--r);
+    color:var(--muted); font:500 14px var(--font); text-decoration:none; cursor:pointer;
+    transition:background .15s, color .15s;
+  }
+  .nav-item:hover { background:var(--blue-lt); color:var(--blue); }
+  .nav-item.active { background:var(--blue-lt); color:var(--blue); font-weight:600; }
+  .nav-icon { font-size:18px; width:22px; text-align:center; flex-shrink:0; }
+
+  .sidebar-footer { margin-top:auto; display:flex; flex-direction:column; gap:4px; padding-top:10px; border-top:1px solid var(--border); }
+  .sidebar-footer .nav-item:hover { color:var(--danger); background:rgba(220,38,38,.08); }
+
+  /* контент: снимаем мобильный кап и раскладываем в 2 колонки */
+  .page { padding:32px 40px; max-width:1400px; }
+  .sec-title { font-size:26px; }
+  .sec-sub { font-size:14px; }
+
+  .dash-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:24px; align-items:start; }
+
+  .dash-grid .tiles { grid-template-columns:repeat(3,1fr); gap:12px; }
+  .tile { padding:22px 20px; cursor:pointer; }
+  .tile:hover { border-color:var(--blue); background:var(--blue-lt); transform:translateY(-2px); }
+
+  .stat-grid { grid-template-columns:repeat(4,1fr); gap:12px; }
+  .stat-tile:hover { border-color:var(--blue); box-shadow:0 4px 14px rgba(0,105,210,.12); }
+
+  .btn { width:auto; display:inline-flex; align-items:center; justify-content:center; padding:11px 22px; cursor:pointer; }
+  .btn-primary:hover { opacity:.9; }
+  .btn-outline:hover { border-color:var(--blue); color:var(--blue); }
+
+  .rep-day-card:hover { border-color:var(--blue); }
+
+  /* ─── ИСПРАВЛЕНИЕ ПЕРЕХОДА #1: карусель проектов ─────────────
+     На мобильном — горизонтальный свайп со scroll-snap.
+     На ≥1024px свайп неуместен (мышь это не тач-жест), а карточек
+     обычно немного — превращаем track в обычную сетку: всё видно
+     сразу, без drag и стрелок. */
+  .carousel-track {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    overflow:visible; scroll-snap-type:none;
+  }
+  .carousel-card { scroll-snap-align:unset; }
+  .carousel-card:hover { border-color:var(--blue); }
+  .carousel-nav, .carousel-dots { display:none; }
+}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ═══ САЙДБАР (виден только на ≥1024px) ═══ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <svg viewBox="0 0 173 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M63.5189 20.5234H86.5V13.6823H63.5189V20.5234Z" fill="#0069D2"/>
+        <path d="M63.5189 34.2047H86.5V27.3635H63.5189V34.2047Z" fill="#0069D2"/>
+        <path d="M63.5189 47.8869H86.5V41.0458H63.5189V47.8869Z" fill="#0069D2"/>
+        <path d="M86.5 13.6823H109.481V6.84119H86.5V13.6823Z" fill="#0069D2"/>
+        <path d="M86.5 27.3635H109.481V20.5234H86.5V27.3635Z" fill="#0069D2"/>
+        <path d="M86.5 41.0457H109.481V34.2046H86.5V41.0457Z" fill="#0069D2"/>
+        <path d="M0.0509033 27.3635H63.5189V20.5234H0.0509033V27.3635Z" fill="#0069D2"/>
+        <path d="M0.0509033 13.6823H63.5189V6.84119H0.0509033V13.6823Z" fill="#0069D2"/>
+        <path d="M0.0509033 41.0457H63.5189V34.2046H0.0509033V41.0457Z" fill="#0069D2"/>
+        <path d="M109.481 20.5234H172.949V13.6823H109.481V20.5234Z" fill="#0069D2"/>
+        <path d="M109.481 6.84116H172.949V0H109.481V6.84116Z" fill="#0069D2"/>
+        <path d="M109.481 34.2047H172.949V27.3635H109.481V34.2047Z" fill="#0069D2"/>
+        <path d="M109.481 47.8869H172.949V41.0458H109.481V47.8869Z" fill="#0069D2"/>
+      </svg>
+      <span class="sidebar-logo-name">ФМ Табель</span>
+    </div>
+
+    <div class="sidebar-user">
+      <div class="sidebar-avatar">ДБ</div>
+      <div style="min-width:0">
+        <div class="sidebar-user-name">Бишаров Дмитрий</div>
+        <div class="sidebar-user-role">Администратор</div>
+      </div>
+    </div>
+
+    <a class="nav-item active" data-page="home" onclick="nav('home')"><span class="nav-icon">🏠</span>Главная</a>
+    <a class="nav-item" data-page="report" onclick="nav('report')"><span class="nav-icon">📝</span>Отчёт</a>
+    <a class="nav-item" data-page="my-stats" onclick="nav('my-stats')"><span class="nav-icon">📊</span>Статистика</a>
+    <a class="nav-item" data-page="admin" onclick="nav('admin')"><span class="nav-icon">⚙️</span>Управление</a>
+
+    <div class="sidebar-footer">
+      <a class="nav-item"><span class="nav-icon">🌙</span>Тёмная тема</a>
+      <a class="nav-item"><span class="nav-icon">↪</span>Выйти</a>
+    </div>
+  </aside>
+
+  <div class="main">
+
+    <!-- ═══ ТОПБАР (виден только на < 1024px, как сейчас) ═══ -->
+    <div class="topbar">
+      <div class="topbar-logo">
+        <svg viewBox="0 0 173 48" fill="#0069D2" xmlns="http://www.w3.org/2000/svg" style="height:20px">
+          <path d="M63.5189 20.5234H86.5V13.6823H63.5189V20.5234Z"/>
+          <path d="M0.0509033 27.3635H63.5189V20.5234H0.0509033V27.3635Z"/>
+          <path d="M109.481 20.5234H172.949V13.6823H109.481V20.5234Z"/>
+        </svg>
+      </div>
+      <div class="topbar-sep"></div>
+      <span class="topbar-name">Бишаров Дмитрий</span>
+      <span class="topbar-badge">Админ</span>
+    </div>
+
+    <!-- ═══ ТАБЫ (виден только на < 1024px, как сейчас) ═══ -->
+    <div class="tabs">
+      <button class="tab active" data-page="home" onclick="nav('home')">Главная</button>
+      <button class="tab" data-page="report" onclick="nav('report')">Отчёт</button>
+      <button class="tab" data-page="my-stats" onclick="nav('my-stats')">Статистика</button>
+      <button class="tab" data-page="admin" onclick="nav('admin')">Управление</button>
+    </div>
+
+    <!-- ═══ ГЛАВНАЯ — двухколоночный дашборд на десктопе ═══ -->
+    <div class="page active" id="home">
+      <div class="sec-head">
+        <div class="sec-title">Добрый день, Дмитрий</div>
+        <div class="sec-sub">Что нужно сделать?</div>
+      </div>
+
+      <div class="dash-grid">
+        <div>
+          <div class="tiles">
+            <div class="tile" onclick="nav('report')">
+              <div class="tile-icon">📝</div>
+              <div class="tile-title">Новый отчёт</div>
+              <div class="tile-desc">Записать рабочее время</div>
+            </div>
+            <div class="tile" onclick="nav('my-stats')">
+              <div class="tile-icon">📊</div>
+              <div class="tile-title">Статистика</div>
+              <div class="tile-desc">Моя активность</div>
+            </div>
+            <div class="tile" onclick="nav('admin')">
+              <div class="tile-icon">⚙️</div>
+              <div class="tile-title">Управление</div>
+              <div class="tile-desc">Команда и проекты</div>
+            </div>
+          </div>
+
+          <div class="month-progress">
+            <div class="month-prog-head">
+              <span class="month-prog-title">Норма за июнь</span>
+              <span class="month-prog-nums">96.4 / 160 ч</span>
+            </div>
+            <div class="month-bar-bg"><div class="month-bar-fill" style="width:60%"></div></div>
+            <div class="month-prog-foot">До конца месяца — 16 рабочих дней</div>
+          </div>
+
+          <div class="card">
+            <div class="card-row"><span class="card-label">Часов в этом месяце</span><span class="card-value">96.4</span></div>
+            <div class="card-row"><span class="card-label">Отпускных дней</span><span class="card-value">2</span></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-divider">Недавние отчёты</div>
+          <div class="rep-day-card">
+            <div class="rep-day-head">
+              <span class="rep-day-name">Сегодня</span>
+              <span class="rep-day-date">14.06.2026</span>
+            </div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Озон Кемерово</span><span class="rep-proj-hrs">5.9 ч</span></div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Озон комплекты</span><span class="rep-proj-hrs">2.1 ч</span></div>
+          </div>
+          <div class="rep-day-card">
+            <div class="rep-day-head">
+              <span class="rep-day-name">Вчера</span>
+              <span class="rep-day-date">13.06.2026</span>
+            </div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Тележки Мультипикинга Улыбка</span><span class="rep-proj-hrs">8 ч</span></div>
+          </div>
+          <div class="rep-day-card">
+            <div class="rep-day-head">
+              <span class="rep-day-name">11.06.2026</span>
+              <span class="rep-day-date">Ср</span>
+            </div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Тележки (мелкие)</span><span class="rep-proj-hrs">3.2 ч</span></div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Фармкомплект</span><span class="rep-proj-hrs">4.8 ч</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ ОТЧЁТ — демонстрация перехода карусели → сетка ═══ -->
+    <div class="page" id="report">
+      <div class="sec-head">
+        <div class="sec-title">Новый отчёт</div>
+        <div class="sec-sub">14 июня 2026</div>
+      </div>
+
+      <label style="display:block; font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.6px; text-transform:uppercase; margin-bottom:8px;">
+        Добавленные проекты
+      </label>
+      <div class="carousel-wrap">
+        <button class="carousel-nav carousel-nav-prev">‹</button>
+        <div class="carousel-track">
+          <div class="carousel-card active-card">
+            <div class="carousel-card-abbr">О3К02</div>
+            <div class="carousel-card-fullname">Озон Кемерово</div>
+            <div class="carousel-card-hrs">5.9 ч</div>
+          </div>
+          <div class="carousel-card">
+            <div class="carousel-card-abbr">ОЗК_М</div>
+            <div class="carousel-card-fullname">Озон комплекты монтаж</div>
+            <div class="carousel-card-hrs">2.1 ч</div>
+          </div>
+          <div class="carousel-card">
+            <div class="carousel-card-abbr">ТМУ</div>
+            <div class="carousel-card-fullname">Улыбка 54 телеги разносортных</div>
+            <div class="carousel-card-hrs">3.0 ч</div>
+          </div>
+          <div class="carousel-card">
+            <div class="carousel-card-abbr">ФАМ</div>
+            <div class="carousel-card-fullname">Фамилия26 (5 двойных, 6 тройных)</div>
+            <div class="carousel-card-hrs">1.5 ч</div>
+          </div>
+        </div>
+        <button class="carousel-nav carousel-nav-next">›</button>
+        <div class="carousel-dots">
+          <span class="carousel-dot active"></span>
+          <span class="carousel-dot"></span>
+          <span class="carousel-dot"></span>
+          <span class="carousel-dot"></span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px; padding:14px 16px; font-size:12px; color:var(--muted); line-height:1.6;">
+        <b style="color:var(--text)">Что меняется при переходе:</b><br>
+        &lt; 1024px — горизонтальная карусель со свайпом и точками-индикатором (тач-жест).<br>
+        ≥ 1024px — те же карточки превращаются в обычную сетку: всё видно сразу,
+        без перетаскивания, добавляется hover. CSS-only переключение
+        (<code>display:grid</code> вместо <code>scroll-snap</code>), вёрстка карточек не меняется.
+      </div>
+    </div>
+
+    <!-- ═══ СТАТИСТИКА (заглушка) ═══ -->
+    <div class="page" id="my-stats">
+      <div class="sec-head">
+        <div class="sec-title">Статистика</div>
+        <div class="sec-sub">За всё время</div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-tile"><div class="stat-val">412.5</div><div class="stat-lbl">Часов всего</div></div>
+        <div class="stat-tile"><div class="stat-val">96.4</div><div class="stat-lbl">За июнь</div></div>
+        <div class="stat-tile"><div class="stat-val">12</div><div class="stat-lbl">Проектов</div></div>
+        <div class="stat-tile"><div class="stat-val">58</div><div class="stat-lbl">Отчётов</div></div>
+      </div>
+      <div class="card" style="margin-top:16px; padding:14px 16px; font-size:12px; color:var(--muted); line-height:1.6;">
+        Табель с таблицей по дням (<code>.ts-table</code>) в этом превью не показан —
+        но переход для него тот же принцип: на мобильном таблица шире экрана,
+        поэтому скроллится перетаскиванием; на десктопе при ширине контента
+        ~1300px таблица из 31 дня + колонка проекта помещается целиком —
+        горизонтальный скролл и drag-курсор можно убрать через
+        <code>@media (min-width:1024px)</code>.
+      </div>
+    </div>
+
+    <!-- ═══ УПРАВЛЕНИЕ → ОБЗОР — двухколоночный дашборд ═══ -->
+    <div class="page" id="admin">
+      <div class="sec-head">
+        <div class="sec-title">Управление</div>
+        <div class="sec-sub">Команда и аналитика</div>
+      </div>
+
+      <div class="dash-grid">
+        <div>
+          <div class="stat-grid">
+            <div class="stat-tile"><div class="stat-val">2032.41</div><div class="stat-lbl">Часов всего</div></div>
+            <div class="stat-tile"><div class="stat-val">512</div><div class="stat-lbl">Отчётов</div></div>
+            <div class="stat-tile"><div class="stat-val">8</div><div class="stat-lbl">Сотрудников</div></div>
+            <div class="stat-tile"><div class="stat-val">58</div><div class="stat-lbl">Проектов</div></div>
+          </div>
+
+          <div class="section-divider">Часы по сотрудникам</div>
+          <div class="card" style="padding:16px 20px">
+            <div class="mock-chart-wrap">
+              <div class="mock-chart">
+                <div class="mock-bar" style="height:92%"><span class="mock-bar-lbl">gleb99996</span></div>
+                <div class="mock-bar" style="height:68%"><span class="mock-bar-lbl">OTKaker</span></div>
+                <div class="mock-bar" style="height:88%"><span class="mock-bar-lbl">Grimlin29</span></div>
+                <div class="mock-bar" style="height:48%"><span class="mock-bar-lbl">bisdimbish</span></div>
+                <div class="mock-bar" style="height:100%"><span class="mock-bar-lbl">Volk_ov02</span></div>
+                <div class="mock-bar" style="height:28%"><span class="mock-bar-lbl">LLlNM0TOr</span></div>
+                <div class="mock-bar" style="height:24%"><span class="mock-bar-lbl">mchsman</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-divider">Последние отчёты</div>
+          <div class="rep-day-card">
+            <div class="rep-day-head">
+              <span class="rep-day-name">Volk_ov02</span>
+              <span class="rep-day-date">11.06.2026 16:52</span>
+            </div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Тележки (мелкие)</span><span class="rep-proj-hrs">3.2 ч</span></div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Фармкомплект</span><span class="rep-proj-hrs">4.8 ч</span></div>
+          </div>
+          <div class="rep-day-card">
+            <div class="rep-day-head">
+              <span class="rep-day-name">bisdimbish</span>
+              <span class="rep-day-date">10.06.2026 09:10</span>
+            </div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Озон Кемерово</span><span class="rep-proj-hrs">5.9 ч</span></div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">Озон комплекты</span><span class="rep-proj-hrs">2.1 ч</span></div>
+          </div>
+          <div class="rep-day-card">
+            <div class="rep-day-head">
+              <span class="rep-day-name">gleb99996</span>
+              <span class="rep-day-date">10.06.2026 08:55</span>
+            </div>
+            <div class="rep-proj-line"><span class="rep-proj-nm">МТС весы</span><span class="rep-proj-hrs">8 ч</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="mode-badge"></div>
+
+<script>
+function nav(pageId){
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === pageId));
+  document.querySelectorAll('.nav-item, .tab').forEach(el => el.classList.toggle('active', el.dataset.page === pageId));
+}
+</script>
+</body>
+</html>
