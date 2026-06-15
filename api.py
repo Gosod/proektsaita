@@ -47,6 +47,9 @@ REPORT_FLAGS_FILE = os.path.join(BASE_DIR, 'report_flags.json')
 
 SPREADSHEET_ID   = os.environ.get('SPREADSHEET_ID', '')
 SHEET_REPORTS    = 'Отчёты'
+# Колонка G (7-я) — стабильный id строки отчёта. Пишется при создании отчёта
+# через API; по нему edit/delete находят строку, не завися от её позиции.
+SHEET_ID_COL     = 7
 
 # ── ПРИЗНАК ВРЕМЕНИ (report_flags.json) ──
 # Админ выставляет при корректировке отчёта сотрудника; используется для
@@ -82,11 +85,12 @@ def verify_password(password: str, stored: str) -> bool:
     except Exception:
         return False
 
-def make_token(user_id: str, username: str) -> str:
+def make_token(user_id: str, username: str, tver: int = 0) -> str:
     """Простой JWT-подобный токен без внешних зависимостей."""
     payload = {
         'uid':  user_id,
         'unm':  username,
+        'tver': int(tver),
         'exp':  (datetime.now(MSK) + timedelta(days=JWT_EXPIRE_DAYS)).timestamp()
     }
     data = json.dumps(payload, separators=(',', ':'))
@@ -95,7 +99,14 @@ def make_token(user_id: str, username: str) -> str:
     return f"{data_b64}.{sig}"
 
 def verify_token(token: str):
-    """Проверяет токен. Возвращает payload или None."""
+    """Проверяет токен. Возвращает payload или None.
+
+    Помимо подписи и срока сверяет версию токена (tver) с текущей версией
+    пользователя (token_version в users.json). Это даёт возможность отзывать
+    уже выданные токены: при сбросе пароля или удалении сотрудника версия
+    увеличивается, и старые токены (с прежней версией или вовсе без неё)
+    перестают действовать. Удалённый пользователь — токен тоже недействителен.
+    """
     try:
         data_b64, sig = token.rsplit('.', 1)
         expected = hmac.new(JWT_SECRET.encode(), data_b64.encode(), hashlib.sha256).hexdigest()
@@ -103,6 +114,12 @@ def verify_token(token: str):
             return None
         payload = json.loads(bytes.fromhex(data_b64).decode())
         if payload['exp'] < datetime.now(MSK).timestamp():
+            return None
+        users = load_json(USERS_FILE, {})
+        urec = users.get(str(payload.get('uid')))
+        if urec is None:
+            return None
+        if int(payload.get('tver', 0)) != int(urec.get('token_version', 0)):
             return None
         return payload
     except Exception:
@@ -337,6 +354,7 @@ def sheets_append(report: dict) -> bool:
         report.get('project', ''),
         _hours_for_sheets(report.get('hours', 0)),
         report.get('comments', ''),
+        report.get('row_id') or gen_id(),   # колонка G — стабильный id строки
     ]
 
     for attempt in range(1, SHEETS_RETRY + 1):
@@ -354,14 +372,28 @@ def sheets_append(report: dict) -> bool:
 
 
 def sheets_read_all() -> list:
-    """Прочитать все строки из листа Отчёты."""
+    """Прочитать все строки из листа Отчёты.
+
+    Возвращает список словарей по заголовкам (Дата, Время, Сотрудник, Проект,
+    Часы, Комментарий) плюс служебный ключ '__row_id' — стабильный id из
+    колонки G, если он там записан (иначе пустая строка).
+
+    Используем get_all_values, а не get_all_records: все значения остаются
+    строками (нужно для часов с запятой — "5,9"), а id из колонки G читается
+    по позиции и не зависит от наличия заголовка для неё.
+    """
     try:
         client  = _sheets_client()
         sheet   = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_REPORTS)
-        # Колонка 5 (Часы) — не даём gspread численно интерпретировать значение,
-        # т.к. он считает запятую разделителем тысяч ("5,9" -> 59).
-        # Парсинг с учётом запятой как десятичного разделителя — в _normalize_sheets_records.
-        records = sheet.get_all_records(numericise_ignore=[5])
+        values  = sheet.get_all_values()
+        if not values:
+            return []
+        headers = values[0]
+        records = []
+        for row in values[1:]:
+            rec = dict(zip(headers, row))
+            rec['__row_id'] = row[SHEET_ID_COL - 1].strip() if len(row) >= SHEET_ID_COL else ''
+            records.append(rec)
         log.info(f"SHEETS_READ | rows={len(records)}")
         return records
     except Exception as e:
@@ -399,7 +431,12 @@ def msk_now() -> datetime:
 
 
 def gen_id() -> str:
-    return msk_now().strftime('%Y%m%d%H%M%S%f')
+    """Уникальный id строки отчёта (метка времени + случайный суффикс).
+
+    Случайный суффикс нужен, чтобы строки из одной отправки (несколько
+    проектов с одинаковым временем) не получили одинаковый id.
+    """
+    return msk_now().strftime('%Y%m%d%H%M%S') + secrets.token_hex(4)
 
 
 def get_user_projects(user_id: int) -> list:
@@ -568,7 +605,7 @@ def register():
     save_json(USERS_FILE, users)
 
     username = users[uid].get('username', '')
-    token    = make_token(uid, username)
+    token    = make_token(uid, username, users[uid].get('token_version', 0))
 
     log.info(f"AUTH_REGISTER | uid={uid} | username={username}")
     return jsonify({
@@ -604,7 +641,7 @@ def login():
         return jsonify({'error': 'Неверный пароль'}), 401
 
     username = users[uid].get('username', '')
-    token    = make_token(uid, username)
+    token    = make_token(uid, username, users[uid].get('token_version', 0))
 
     log.info(f"AUTH_LOGIN | uid={uid} | username={username}")
     return jsonify({
@@ -729,8 +766,13 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
             uid = uname_to_id.get(username.lower(), 0)
             time_type = report_flags.get(str(uid), {}).get(date_iso, {}).get(project, '')
 
+            # Стабильный id из колонки G; для строк без него (старые записи,
+            # отчёты от бота) — позиционный 'sheets_N' как раньше.
+            rid = str(row.get('__row_id', '')).strip()
+            report_id = rid if rid else f'sheets_{i}'
+
             normalized.append({
-                'id':        f'sheets_{i}',
+                'id':        report_id,
                 'user_id':   uid,
                 'username':  username,
                 'project':   project,
@@ -1076,33 +1118,40 @@ def get_reports():
 
 
 # ── UPDATE REPORT (редактирование строки в Sheets) ────
+def _resolve_sheet_row(report_id: str, values: list):
+    """1-based номер строки в Sheets для report_id, либо None.
+
+    values — результат get_all_values() (включая строку заголовка).
+    'sheets_N' — устаревший позиционный формат (строки без сохранённого id,
+    напр. от бота). Иначе строка ищется по совпадению id в колонке G — это
+    устойчиво к сдвигам строк при удалении и к параллельным правкам.
+    """
+    if report_id.startswith('sheets_'):
+        try:
+            return int(report_id.split('_')[1]) + 2  # 0-based → 1-based + заголовок
+        except (IndexError, ValueError):
+            return None
+    for i in range(1, len(values)):  # пропускаем заголовок
+        row = values[i]
+        if len(row) >= SHEET_ID_COL and str(row[SHEET_ID_COL - 1]).strip() == report_id:
+            return i + 1  # 1-based номер строки
+    return None
+
+
 @app.route('/api/report/<report_id>', methods=['PUT'])
 @admin_token_required
 def update_report(report_id):
-    """
-    Редактирование строки в Sheets по индексу.
-    report_id формата 'sheets_N' где N — 0-based индекс в массиве записей.
-    """
+    """Редактирование строки в Sheets по стабильному id (колонка G) или по
+    устаревшему позиционному 'sheets_N' (для строк без id)."""
     data = request.get_json(silent=True) or {}
-
-    if not report_id.startswith('sheets_'):
-        return jsonify({'error': 'Invalid report_id format'}), 400
-
-    try:
-        row_idx = int(report_id.split('_')[1])  # 0-based
-    except (IndexError, ValueError):
-        return jsonify({'error': 'Invalid report_id'}), 400
 
     try:
         client  = _sheets_client()
         sheet   = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_REPORTS)
         records = sheet.get_all_values()  # включая заголовок
 
-        # row_idx — индекс в нормализованном массиве (без заголовка)
-        # В Sheets: строка 1 = заголовок, строка 2 = первая запись
-        sheet_row = row_idx + 2  # 1-based + заголовок
-
-        if sheet_row > len(records):
+        sheet_row = _resolve_sheet_row(report_id, records)
+        if sheet_row is None or sheet_row > len(records):
             return jsonify({'error': 'Row not found'}), 404
 
         # Обновляем нужные ячейки
@@ -1160,19 +1209,15 @@ def update_report(report_id):
 @app.route('/api/report/<report_id>', methods=['DELETE'])
 @admin_token_required
 def delete_report(report_id):
-    """Удаление строки из Sheets по индексу."""
-    if not report_id.startswith('sheets_'):
-        return jsonify({'error': 'Invalid report_id format'}), 400
-
-    try:
-        row_idx   = int(report_id.split('_')[1])
-        sheet_row = row_idx + 2
-    except (IndexError, ValueError):
-        return jsonify({'error': 'Invalid report_id'}), 400
-
+    """Удаление строки из Sheets по стабильному id (колонка G) или по
+    устаревшему позиционному 'sheets_N'."""
     try:
         client = _sheets_client()
         sheet  = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_REPORTS)
+        values = sheet.get_all_values()
+        sheet_row = _resolve_sheet_row(report_id, values)
+        if sheet_row is None or sheet_row > len(values):
+            return jsonify({'error': 'Row not found'}), 404
         sheet.delete_rows(sheet_row)
         log.info(f"REPORT_DELETED | report_id={report_id} | sheet_row={sheet_row}")
         return jsonify({'success': True, 'deleted': report_id})
@@ -1371,13 +1416,15 @@ def admin_employee_invite():
 @app.route('/api/admin/employee/reset', methods=['POST'])
 @admin_token_required
 def admin_employee_reset():
-    """Сбросить пароль и PIN. Сотрудник регистрируется заново по новому коду."""
+    """Сбросить пароль. Сотрудник регистрируется заново по новому коду."""
     data = request.get_json(silent=True) or {}
     uid  = str(data.get('user_id', ''))
     users = load_json(USERS_FILE, {})
     if uid not in users:
         return jsonify({'error': 'Пользователь не найден'}), 404
     users[uid]['password_hash'] = None
+    # Отзываем выданные токены: старые сессии перестают работать сразу
+    users[uid]['token_version'] = int(users[uid].get('token_version', 0)) + 1
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
     log.info(f"ADMIN_EMP_RESET | by={request.current_user.get('uid')} | uid={uid}")
