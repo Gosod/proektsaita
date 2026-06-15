@@ -8,3 +8,6 @@ report_flags.json
 users.json
 import_out/
 preview_*.png
+dark_before.png
+dark_after.png
+preview_*.png
