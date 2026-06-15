@@ -77,6 +77,11 @@ body {
   -webkit-font-smoothing:antialiased;
   background: var(--bg);
   transition: background-color .45s var(--ease), color .45s var(--ease);
+  -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+}
+/* Выделять можно только поля ввода и код-приглашение (его копирует админ) */
+input, textarea, select, .acc-code, .acc-code b {
+  -webkit-user-select:text; user-select:text;
 }
 
 /* Фон — логотип Фотомеханики (тот же SVG что в шапке), увеличенный */
