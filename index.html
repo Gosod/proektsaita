@@ -597,21 +597,22 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .ts-total-row td { font-weight:600; background:var(--surface) !important; }
 .ts-lunch-row td { background:rgba(100,100,100,.05) !important; }
 .ts-lunch-cell { color:var(--muted); font-style:italic; }
-.ts-vac-row td { background:rgba(22,163,74,.06) !important; }
+.ts-vac-row td { background:rgba(22,163,74,.12) !important; }
 .ts-vac-cell { color:var(--success); font-style:italic; }
 /* Закреплённая первая колонка должна оставаться непрозрачной — иначе при
    горизонтальной прокрутке сквозь неё просвечивают значения соседних дней */
 .ts-lunch-row .ts-proj-cell, .ts-vac-row .ts-proj-cell { background:var(--white) !important; }
 .ts-norm-hint { font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; user-select:none; -webkit-user-select:none; }
 
-/* ─── Подсветка ячеек: переработка / отработка невыхода ─── */
-.ts-cell-overtime { background:rgba(250,204,21,.35) !important; }
-.ts-cell-dayoff   { background:rgba(59,130,246,.22) !important; }
+/* ─── Подсветка ячеек: переработка (жёлтый) / отработка невыхода (синий) ───
+   Приглушённые тона. «Признак времени» как текст в табеле не показываем. */
+.ts-cell-overtime { background:rgba(250,204,21,.28) !important; }
+.ts-cell-dayoff   { background:rgba(96,165,250,.20) !important; }
 .ts-legend { display:flex; flex-wrap:wrap; gap:12px; font-size:11px; color:var(--muted); margin-top:6px; padding:0 2px; }
 .ts-legend-item { display:flex; align-items:center; gap:5px; }
 .ts-legend-swatch { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
-.ts-legend-swatch.ts-cell-overtime { background:rgba(250,204,21,.7); }
-.ts-legend-swatch.ts-cell-dayoff   { background:rgba(59,130,246,.55); }
+.ts-legend-swatch.ts-cell-overtime { background:rgba(250,204,21,.55); }
+.ts-legend-swatch.ts-cell-dayoff   { background:rgba(96,165,250,.50); }
 
 /* ─── STATS ──────────────────────────────────────── */
 .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
@@ -1319,7 +1320,7 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
       <label class="field-label">Аббревиатура</label>
       <input type="text" class="field-input" id="newAbbr" placeholder="ОЗН" maxlength="5"
         oninput="this.value=this.value.toUpperCase(); updateProjPreview()">
-      <div class="field-hint">3–5 символов, только заглавные</div>
+      <div class="field-hint">2–10 символов, только заглавные</div>
       <div class="err" id="abbrErr"></div>
     </div>
     <div class="field">
@@ -3262,7 +3263,7 @@ async function submitAddProject() {
   let ok = true;
   const ae = document.getElementById('abbrErr'); const fe = document.getElementById('fullErr');
   ae.classList.remove('show'); fe.classList.remove('show');
-  if (abbr.length < 3 || abbr.length > 5) { ae.textContent='3–5 символов'; ae.classList.add('show'); ok=false; }
+  if (abbr.length < 2 || abbr.length > 10) { ae.textContent='2–10 символов'; ae.classList.add('show'); ok=false; }
   if (full.length<3) { fe.textContent='Мин. 3 символа'; fe.classList.add('show'); ok=false; }
   if (S.allProjects.find(p=>p.abbr===abbr)) { ae.textContent='Уже используется'; ae.classList.add('show'); ok=false; }
   if (!ok) return;
