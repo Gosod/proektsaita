@@ -147,7 +147,7 @@ def main():
             if not cur or not (b and str(b).strip()):
                 continue
             project = str(b).strip()
-            username, uid, _matched = resolve(cur)
+            username, uid, matched = resolve(cur)
             for c, day in dcols.items():
                 v = ws.cell(r, c).value
                 if v is None or v == '':
@@ -155,7 +155,7 @@ def main():
                 date_iso = f"{args.year:04d}-{month:02d}-{day:02d}"
                 if isinstance(v, (int, float)):
                     if v:
-                        reports.append((date_iso, username, project, float(v)))
+                        reports.append((date_iso, username, project, float(v), matched))
                         work_days[(username, date_iso)].add(project)
                 else:
                     tok = str(v).strip().lower()
@@ -177,18 +177,29 @@ def main():
                 conflicts += 1
 
     os.makedirs(args.out, exist_ok=True)
+    HEADER = 'Дата\tВремя\tСотрудник\tПроект\tЧасы\tКомментарий\tID\n'
+
+    def write_tsv(path, rows):
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(HEADER)
+            for date_iso, username, project, hours in rows:
+                y, m, d = date_iso.split('-')
+                f.write(f"{d}.{m}.{y}\t\t{username}\t{project}\t{fmt_hours(hours)}\t\t{uuid.uuid4().hex[:12]}\n")
+
+    matched_rows   = [(d, u, p, h) for d, u, p, h, m in reports if m]
+    unmatched_rows = [(d, u, p, h) for d, u, p, h, m in reports if not m]
+    # Готов к вставке в лист «Отчёты» — только привязываемые сотрудники
     tsv_path = os.path.join(args.out, 'reports_import.tsv')
-    with open(tsv_path, 'w', encoding='utf-8') as f:
-        f.write('Дата\tВремя\tСотрудник\tПроект\tЧасы\tКомментарий\tID\n')
-        for date_iso, username, project, hours in reports:
-            y, m, d = date_iso.split('-')
-            f.write(f"{d}.{m}.{y}\t\t{username}\t{project}\t{fmt_hours(hours)}\t\t{uuid.uuid4().hex[:12]}\n")
+    write_tsv(tsv_path, matched_rows)
+    # Остальные (нет аккаунта на сайте) — отдельно, на случай заведения аккаунтов
+    if unmatched_rows:
+        write_tsv(os.path.join(args.out, 'reports_unmatched.tsv'), unmatched_rows)
 
     vac_path = os.path.join(args.out, 'vacations_import.json')
     json.dump(vacations, open(vac_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 
     print(f"Месяцы:            {month_sheets}")
-    print(f"Строк-отчётов:     {len(reports)}")
+    print(f"Строк-отчётов:     {len(reports)}  (привязано: {len(matched_rows)} | без аккаунта: {len(unmatched_rows)})")
     matched_keys = [k for k in canon_name if k in user_idx]
     unmatched_names = sorted(canon_name[k] for k in canon_name if k not in user_idx)
     print(f"Сотрудников:       {len(canon_name)}  (сопоставлено в users.json: {len(matched_keys)})")
