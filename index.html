@@ -2749,7 +2749,7 @@ function renderAdminManage() {
             <div class="proj-mgr-row" style="margin-bottom:6px">
               <span class="proj-mgr-abbr">${p.abbr}</span>
               <span class="proj-mgr-full">${p.full}</span>
-              <button class="proj-mgr-del" onclick="removeProject('${p.abbr}')">✕</button>
+              <button class="proj-mgr-del" onclick="removeProject('${(p.abbr||'').replace(/'/g,"\\'")}','${(p.full||'').replace(/'/g,"\\'")}')">✕</button>
             </div>`).join('')}
         </div>
       </div>`;
@@ -2963,18 +2963,20 @@ function submitCreateFolder() {
 
 
 // ── REMOVE PROJECT ────────────────────────────────────
-async function removeProject(abbr) {
-  showConfirm(`Удалить проект «${abbr}»?`, async () => {
+async function removeProject(abbr, full) {
+  showConfirm(`Удалить проект «${abbr||full}»?`, async () => {
     try {
-      const resp = await fetch(`/api/project/${abbr}`, {
+      const resp = await fetch('/api/project', {
         method: 'DELETE',
-        headers: {'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token}
+        headers: {'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+        body: JSON.stringify({abbr, full})
       });
       if (!resp.ok) throw new Error();
-      S.allProjects = S.allProjects.filter(p=>p.abbr!==abbr);
-      S.projects    = S.projects.filter(p=>p.abbr!==abbr);
+      const match = abbr ? (p=>p.abbr!==abbr) : (p=>p.full!==full);
+      S.allProjects = S.allProjects.filter(match);
+      S.projects    = S.projects.filter(match);
       buildChips(); renderAdminManage();
-      toast(`Проект ${abbr} удалён`, 'info');
+      toast(`Проект ${abbr||full} удалён`, 'info');
     } catch(e) { toast('Ошибка удаления', 'err'); }
   });
 }

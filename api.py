@@ -1266,6 +1266,35 @@ def remove_project(abbr):
     return jsonify({'success': True, 'deleted': abbr})
 
 
+@app.route('/api/project', methods=['DELETE'])
+@admin_token_required
+def remove_project_body():
+    """Удаление проекта по телу запроса: abbr, либо (если пуст) по full.
+
+    Нужно для проектов без аббревиатуры — у них путь /api/project/ пустой и
+    не матчится роутом. Также избавляет от проблем с кириллицей в URL.
+    """
+    data = request.get_json(silent=True) or {}
+    abbr = str(data.get('abbr', '')).strip()
+    full = str(data.get('full', '')).strip()
+    if not abbr and not full:
+        return jsonify({'error': 'abbr или full обязательны'}), 400
+
+    projects = load_json(PROJECTS_FILE, [])
+    before   = len(projects)
+    if abbr:
+        projects = [p for p in projects if p.get('abbr') != abbr]
+    else:
+        projects = [p for p in projects if p.get('full') != full]
+
+    if len(projects) == before:
+        return jsonify({'error': 'Проект не найден'}), 404
+
+    save_json(PROJECTS_FILE, projects)
+    log.info(f"PROJECT_REMOVED | admin={request.current_user['uid']} | abbr={abbr or '-'} | full={full or '-'}")
+    return jsonify({'success': True, 'deleted': abbr or full})
+
+
 # ── ASSIGN PROJECTS ────────────────────────────────────
 @app.route('/api/assign', methods=['POST'])
 @admin_token_required
