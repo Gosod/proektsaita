@@ -327,8 +327,13 @@ textarea { min-height:76px; resize:vertical; }
   transition: border-color .15s, background .15s;
   user-select: none;
 }
-.cat-header:active { background: var(--blue-lt); border-color: var(--blue); }
+.cat-header:active { transform: scale(.99); }
 .cat-header.open { border-radius: var(--r) var(--r) 0 0; border-bottom-color: transparent; }
+/* Без синей фокус-рамки и без мобильной синей тап-подсветки на этих
+   интерактивных элементах (визуальный отклик — scale выше). .selected не трогаем. */
+.cat-chip, .chip, .cat-header { outline: none; -webkit-tap-highlight-color: transparent; }
+.cat-chip:focus, .chip:focus, .cat-header:focus,
+.cat-chip:focus-visible, .chip:focus-visible, .cat-header:focus-visible { outline: none; }
 .cat-left { display: flex; align-items: center; gap: 8px; }
 .cat-icon { font-size: 16px; flex-shrink: 0; }
 .cat-name { font-size: 14px; font-weight: 600; }
@@ -712,6 +717,8 @@ button { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
 .proj-mgr-full { font-size:13px; color:var(--muted); flex:1; }
 .proj-mgr-del { background:none; border:none; font-size:15px; color:var(--muted); padding:4px 6px; transition:color .15s; }
 .proj-mgr-del:hover { color:var(--danger); }
+.proj-mgr-edit { background:none; border:none; font-size:14px; color:var(--muted); padding:4px 6px; transition:color .15s; }
+.proj-mgr-edit:hover { color:var(--blue); }
 
 /* ─── MODAL ──────────────────────────────────────── */
 .modal-bg {
@@ -1637,9 +1644,34 @@ function renderStatProjectFolders(byProject) {
   }).join('');
 }
 
+// Применяет сохранённую папку проекта (поле folder из projects.json) к CATEGORIES:
+// убирает abbr из всех папок и кладёт в указанную. Проекты без folder остаются
+// на своём месте по умолчанию (хардкод CATEGORIES). Делает смену папки персистентной.
+function applyProjectFolders(projectList) {
+  (projectList || []).forEach(p => {
+    if (!p.folder) return;
+    const al = (p.abbr || '').toLowerCase();
+    CATEGORIES.forEach(c => {
+      if (c.name === 'Остальные') return;
+      c.abbrs = c.abbrs.filter(a => a.toLowerCase() !== al);
+    });
+    if (p.folder === 'Остальные') return;
+    const cat = CATEGORIES.find(c => c.name === p.folder);
+    if (cat && !cat.abbrs.some(a => a.toLowerCase() === al)) cat.abbrs.push(p.abbr);
+  });
+}
+
+// Текущая папка проекта по abbr (имя категории, в чьём abbrs он лежит; иначе «Остальные»).
+function getProjectFolder(abbr) {
+  const al = (abbr || '').toLowerCase();
+  const cat = CATEGORIES.find(c => c.name !== 'Остальные' && c.abbrs.some(a => a.toLowerCase() === al));
+  return cat ? cat.name : 'Остальные';
+}
+
 // Пересчитывает папку "Остальные" — все проекты, не попавшие в другие папки.
 // projectList: массив проектов ({abbr, full}), от которого считаем.
 function recalcOthers(projectList) {
+  applyProjectFolders(projectList);
   const categorized = new Set(
     CATEGORIES.filter(c => c.name !== 'Остальные' && c.abbrs.length)
       .flatMap(c => c.abbrs.map(a => a.toLowerCase()))
@@ -2380,6 +2412,7 @@ async function renderAdminAccess() {
     if (!resp.ok) throw new Error();
     const data = await resp.json();
     employees = data.employees || [];
+    S.adminEmployees = employees;
   } catch(e) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Не удалось загрузить список</div></div>`;
     return;
@@ -2410,6 +2443,7 @@ async function renderAdminAccess() {
         ${codeLine}
         ${normLabel}
         <div class="acc-actions">
+          <button class="act-btn" onclick="accEditName('${e.id}')">Изменить</button>
           <button class="act-btn" onclick="accGenCode('${e.id}')">Выдать код</button>
           <button class="act-btn" onclick="accReset('${e.id}','${nm}')">Сброс пароля</button>
           <button class="act-btn" onclick="accSetSchedule('${e.id}','${e.schedule||''}',${e.monthly_norm})">Расписание</button>
@@ -2509,6 +2543,49 @@ async function accSubmitSchedule(uid) {
     toast('Расписание обновлено','ok');
     renderAdminAccess();
   } catch(e) { toast('Ошибка: '+(e.message||'не удалось'),'err'); }
+}
+
+// ── EDIT EMPLOYEE (только ФИО; ник не меняется) ──
+function accEditName(uid) {
+  const e = (S.adminEmployees || []).find(x => String(x.id) === String(uid));
+  if (!e) { toast('Сотрудник не найден', 'err'); return; }
+  const old = document.getElementById('_empEditModal'); if (old) old.remove();
+  const d = document.createElement('div');
+  d.id = '_empEditModal'; d.className = 'modal-bg open';
+  d.innerHTML = `
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">Изменить сотрудника</span>
+        <button class="modal-close" onclick="document.getElementById('_empEditModal').remove()">✕</button>
+      </div>
+      <div class="field">
+        <label class="field-label">Ник (не меняется)</label>
+        <div class="field-input" style="opacity:.6;cursor:not-allowed">@${escapeHtml(e.username)}</div>
+      </div>
+      <div class="field">
+        <label class="field-label">ФИО</label>
+        <input type="text" class="field-input" id="editEmpName" value="${escapeHtml(e.display_name || '')}" maxlength="120">
+      </div>
+      <button class="btn btn-primary" onclick="accSubmitEditName('${(uid || '').toString().replace(/'/g, "\\'")}')">Сохранить</button>
+    </div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', ev => { if (ev.target === d) d.remove(); });
+}
+
+async function accSubmitEditName(uid) {
+  const display_name = document.getElementById('editEmpName').value.trim();
+  if (!display_name) { toast('Введите ФИО', 'err'); return; }
+  try {
+    const resp = await fetch('/api/admin/employee/edit', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+      body: JSON.stringify({user_id: uid, display_name})
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error || '');
+    document.getElementById('_empEditModal')?.remove();
+    toast('ФИО обновлено', 'ok');
+    renderAdminAccess();
+  } catch(e) { toast('Ошибка: ' + (e.message || 'не удалось'), 'err'); }
 }
 
 async function accVacation(uid, name) {
@@ -2749,6 +2826,7 @@ function renderAdminManage() {
             <div class="proj-mgr-row" style="margin-bottom:6px">
               <span class="proj-mgr-abbr">${p.abbr}</span>
               <span class="proj-mgr-full">${p.full}</span>
+              <button class="proj-mgr-edit" onclick="editProject('${(p.abbr||'').replace(/'/g,"\\'")}')">✎</button>
               <button class="proj-mgr-del" onclick="removeProject('${(p.abbr||'').replace(/'/g,"\\'")}','${(p.full||'').replace(/'/g,"\\'")}')">✕</button>
             </div>`).join('')}
         </div>
@@ -2979,6 +3057,65 @@ async function removeProject(abbr, full) {
       toast(`Проект ${abbr||full} удалён`, 'info');
     } catch(e) { toast('Ошибка удаления', 'err'); }
   });
+}
+
+// ── EDIT PROJECT ──────────────────────────────────────
+function editProject(abbr) {
+  const p = (S.allProjects || []).find(x => x.abbr === abbr);
+  if (!p) { toast('Проект не найден', 'err'); return; }
+  const curFolder = getProjectFolder(abbr);
+  const old = document.getElementById('_projEditModal'); if (old) old.remove();
+  const d = document.createElement('div');
+  d.id = '_projEditModal'; d.className = 'modal-bg open';
+  const folderOpts = CATEGORIES.map(c =>
+    `<option value="${escapeHtml(c.name)}"${c.name === curFolder ? ' selected' : ''}>${escapeHtml(c.name)}</option>`
+  ).join('');
+  d.innerHTML = `
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">Изменить проект</span>
+        <button class="modal-close" onclick="document.getElementById('_projEditModal').remove()">✕</button>
+      </div>
+      <div class="field">
+        <label class="field-label">Аббревиатура (не меняется)</label>
+        <div class="field-input" style="opacity:.6;cursor:not-allowed">${escapeHtml(p.abbr)}</div>
+      </div>
+      <div class="field">
+        <label class="field-label">Полное название</label>
+        <input type="text" class="field-input" id="editProjFull" value="${escapeHtml(p.full)}" maxlength="120">
+      </div>
+      <div class="field">
+        <label class="field-label">Папка</label>
+        <select class="field-input" id="editProjFolder">${folderOpts}</select>
+      </div>
+      <button class="btn btn-primary" onclick="submitEditProject('${(abbr || '').replace(/'/g, "\\'")}')">Сохранить</button>
+    </div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', ev => { if (ev.target === d) d.remove(); });
+}
+
+async function submitEditProject(abbr) {
+  const full   = document.getElementById('editProjFull').value.trim();
+  const folder = document.getElementById('editProjFolder').value;
+  if (full.length < 3) { toast('Полное название минимум 3 символа', 'err'); return; }
+  try {
+    const resp = await fetch('/api/admin/project/edit', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
+      body: JSON.stringify({abbr, full, folder})
+    });
+    if (!resp.ok) throw new Error((await resp.json()).error || '');
+    // Обновляем локальные данные: полное название и папку (folder сделает
+    // applyProjectFolders при перерисовке через recalcOthers)
+    [S.allProjects, S.projects].forEach(list => {
+      const p = (list || []).find(x => x.abbr === abbr);
+      if (p) { p.full = full; p.folder = folder; }
+    });
+    document.getElementById('_projEditModal')?.remove();
+    buildCategories();
+    renderAdminManage();
+    toast('Проект обновлён', 'ok');
+  } catch(e) { toast('Ошибка: ' + (e.message || 'не удалось'), 'err'); }
 }
 
 // ── REPORTS TABLE ─────────────────────────────────────
@@ -3279,17 +3416,12 @@ async function submitAddProject() {
   try {
     const resp = await fetch('/api/project', {
       method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
-      body: JSON.stringify({abbr, full})
+      body: JSON.stringify({abbr, full, folder})
     });
     if (!resp.ok) { const e=await resp.json(); throw new Error(e.error||'Ошибка'); }
     const np = {abbr, full};
+    if (folder) np.folder = folder;   // папку разложит applyProjectFolders при перерисовке
     S.allProjects.push(np); S.projects.push(np);
-
-    // Добавляем в выбранную папку
-    if (folder) {
-      const cat = CATEGORIES.find(c => c.name === folder);
-      if (cat && !cat.abbrs.includes(abbr)) cat.abbrs.push(abbr);
-    }
 
     document.getElementById('newAbbr').value='';
     document.getElementById('newFull').value='';

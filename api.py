@@ -1232,8 +1232,9 @@ def delete_report(report_id):
 def add_project():
     data = request.get_json(silent=True) or {}
 
-    abbr = str(data.get('abbr', '')).strip().upper()
-    full = str(data.get('full', '')).strip()
+    abbr   = str(data.get('abbr', '')).strip().upper()
+    full   = str(data.get('full', '')).strip()
+    folder = str(data.get('folder', '')).strip()
 
     if len(abbr) < 2:
         return jsonify({'error': 'abbr минимум 2 символа'}), 400
@@ -1244,11 +1245,14 @@ def add_project():
     if any(p['abbr'] == abbr for p in projects):
         return jsonify({'error': 'Проект уже существует'}), 400
 
-    projects.append({'abbr': abbr, 'full': full})
+    proj = {'abbr': abbr, 'full': full}
+    if folder:
+        proj['folder'] = folder
+    projects.append(proj)
     save_json(PROJECTS_FILE, projects)
 
-    log.info(f"PROJECT_ADDED | admin={request.current_user['uid']} | abbr={abbr} | full={full}")
-    return jsonify({'success': True, 'project': {'abbr': abbr, 'full': full}})
+    log.info(f"PROJECT_ADDED | admin={request.current_user['uid']} | abbr={abbr} | full={full} | folder={folder or '-'}")
+    return jsonify({'success': True, 'project': proj})
 
 
 @app.route('/api/project/<abbr>', methods=['DELETE'])
@@ -1293,6 +1297,42 @@ def remove_project_body():
     save_json(PROJECTS_FILE, projects)
     log.info(f"PROJECT_REMOVED | admin={request.current_user['uid']} | abbr={abbr or '-'} | full={full or '-'}")
     return jsonify({'success': True, 'deleted': abbr or full})
+
+
+# ── EDIT PROJECT (полное название + папка; abbr — ключ, не меняется) ──
+@app.route('/api/admin/project/edit', methods=['POST'])
+@admin_token_required
+def admin_project_edit():
+    """Редактирование проекта. abbr — идентификатор (не меняется), т.к. по нему
+    проект связан с отчётами в Sheets, папками и назначениями. Меняем только
+    полное название и папку."""
+    data   = request.get_json(silent=True) or {}
+    abbr   = str(data.get('abbr', '')).strip()
+    full   = str(data.get('full', '')).strip()
+    folder = str(data.get('folder', '')).strip()
+    if not abbr:
+        return jsonify({'error': 'abbr обязателен'}), 400
+    if len(full) < 3:
+        return jsonify({'error': 'Полное название минимум 3 символа'}), 400
+
+    projects = load_json(PROJECTS_FILE, [])
+    found = False
+    for p in projects:
+        if p.get('abbr') == abbr:
+            p['full'] = full
+            if folder:
+                p['folder'] = folder
+            else:
+                p.pop('folder', None)
+            found = True
+            break
+    if not found:
+        return jsonify({'error': 'Проект не найден'}), 404
+    if not save_json(PROJECTS_FILE, projects):
+        return jsonify({'error': 'Не удалось сохранить'}), 500
+
+    log.info(f"PROJECT_EDIT | admin={request.current_user['uid']} | abbr={abbr} | folder={folder or '-'}")
+    return jsonify({'success': True, 'project': {'abbr': abbr, 'full': full, 'folder': folder}})
 
 
 # ── ASSIGN PROJECTS ────────────────────────────────────
@@ -1481,6 +1521,26 @@ def admin_employee_schedule():
     if not save_json(USERS_FILE, users):
         return jsonify({'error': 'Не удалось сохранить'}), 500
     log.info(f"ADMIN_EMP_SCHED | by={request.current_user.get('uid')} | uid={uid} | schedule={schedule}")
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/employee/edit', methods=['POST'])
+@admin_token_required
+def admin_employee_edit():
+    """Редактирование ФИО (display_name). Ник (username) не меняется — он
+    пишется в Sheets и связывает прошлые отчёты сотрудника."""
+    data         = request.get_json(silent=True) or {}
+    uid          = str(data.get('user_id', ''))
+    display_name = str(data.get('display_name', '')).strip()
+    if not display_name:
+        return jsonify({'error': 'ФИО обязательно'}), 400
+    users = load_json(USERS_FILE, {})
+    if uid not in users:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+    users[uid]['display_name'] = display_name
+    if not save_json(USERS_FILE, users):
+        return jsonify({'error': 'Не удалось сохранить'}), 500
+    log.info(f"ADMIN_EMP_EDIT | by={request.current_user.get('uid')} | uid={uid}")
     return jsonify({'success': True})
 
 
