@@ -327,7 +327,9 @@ textarea { min-height:76px; resize:vertical; }
   transition: border-color .15s, background .15s;
   user-select: none;
 }
-.cat-header:active { transform: scale(.99); }
+/* .cat-header — шапка единой карточки-аккордеона; transform/scale на :active
+   ломал стык с телом (верх съезжал). Без синей заливки и без press-анимации —
+   отклик даёт поворот стрелки и раскрытие списка. */
 .cat-header.open { border-radius: var(--r) var(--r) 0 0; border-bottom-color: transparent; }
 /* Без синей фокус-рамки и без мобильной синей тап-подсветки на этих
    интерактивных элементах (визуальный отклик — scale выше). .selected не трогаем. */
