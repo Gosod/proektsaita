@@ -51,6 +51,8 @@ SHEET_REPORTS    = 'Отчёты'
 # Колонка G (7-я) — стабильный id строки отчёта. Пишется при создании отчёта
 # через API; по нему edit/delete находят строку, не завися от её позиции.
 SHEET_ID_COL     = 7
+# Колонка H (8-я) — реальный момент внесения отчёта (для контроля «задним числом»).
+SHEET_SUBMITTED_COL = 8
 
 # ── ПРИЗНАК ВРЕМЕНИ (report_flags.json) ──
 # Админ выставляет при корректировке отчёта сотрудника; используется для
@@ -337,6 +339,16 @@ def _hours_for_sheets(hours) -> str:
     return str(hours).replace('.', ',')
 
 
+def _submitted_for_sheets(submitted_at: str) -> str:
+    """Форматирует момент внесения для колонки H: 'dd.mm.yyyy HH:MM:SS'.
+    Если не передан — берём текущее время (реальный момент записи в Sheets)."""
+    try:
+        dt = datetime.strptime(submitted_at, '%Y-%m-%d %H:%M:%S')
+    except Exception:
+        dt = msk_now()
+    return dt.strftime('%d.%m.%Y %H:%M:%S')
+
+
 def sheets_append(report: dict) -> bool:
     """Добавить строку в Google Sheets с retry."""
     dt_str = report.get('datetime', '')
@@ -356,6 +368,7 @@ def sheets_append(report: dict) -> bool:
         _hours_for_sheets(report.get('hours', 0)),
         report.get('comments', ''),
         report.get('row_id') or gen_id(),   # колонка G — стабильный id строки
+        _submitted_for_sheets(report.get('submitted_at', '')),  # колонка H — когда реально внесён
     ]
 
     for attempt in range(1, SHEETS_RETRY + 1):
@@ -394,6 +407,7 @@ def sheets_read_all() -> list:
         for row in values[1:]:
             rec = dict(zip(headers, row))
             rec['__row_id'] = row[SHEET_ID_COL - 1].strip() if len(row) >= SHEET_ID_COL else ''
+            rec['__submitted_at'] = row[SHEET_SUBMITTED_COL - 1].strip() if len(row) >= SHEET_SUBMITTED_COL else ''
             records.append(rec)
         log.info(f"SHEETS_READ | rows={len(records)}")
         return records
@@ -772,6 +786,19 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
             rid = str(row.get('__row_id', '')).strip()
             report_id = rid if rid else f'sheets_{i}'
 
+            # Реальный момент внесения (колонка H). Если он есть и его дата не
+            # совпадает с датой отчёта — отчёт внесён «задним числом» (off_date).
+            # Для старых строк без колонки H момент неизвестен — не помечаем.
+            sub_raw = str(row.get('__submitted_at', '')).strip()
+            submitted_at = ''
+            off_date = False
+            try:
+                sdt = datetime.strptime(sub_raw, '%d.%m.%Y %H:%M:%S')
+                submitted_at = sdt.strftime('%d.%m.%Y %H:%M')
+                off_date = sdt.strftime('%Y-%m-%d') != date_iso
+            except Exception:
+                pass
+
             normalized.append({
                 'id':        report_id,
                 'user_id':   uid,
@@ -782,6 +809,8 @@ def _normalize_sheets_records(records: list, all_users: dict) -> list:
                 'date':      date_iso,
                 'datetime':  datetime_str,
                 'time_type': time_type,
+                'submitted_at': submitted_at,
+                'off_date':     off_date,
             })
         except Exception as e:
             log.warning(f"Пропуск строки Sheets row={i}: {e}")
@@ -839,6 +868,7 @@ def submit_report_pwa():
             'comments': proj_cmt or general_cmt,
             'date':     dt.strftime('%Y-%m-%d'),
             'datetime': dt.strftime('%Y-%m-%d %H:%M:%S'),
+            'submitted_at': msk_now().strftime('%Y-%m-%d %H:%M:%S'),
         }
         # Тестовый сотрудник — сохраняем локально, не в Sheets
         if is_test_user:
@@ -918,6 +948,7 @@ def admin_create_report():
             'comments': proj_cmt or general_cmt,
             'date':     date_str,
             'datetime': dt.strftime('%Y-%m-%d %H:%M:%S'),
+            'submitted_at': msk_now().strftime('%Y-%m-%d %H:%M:%S'),
         }
         # Тестовый сотрудник — сохраняем локально, не в Sheets
         if is_test_user:

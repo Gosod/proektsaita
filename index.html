@@ -239,6 +239,8 @@ input,textarea,select { font-family:var(--font); }
 }
 .rep-day-name { font-size: 14px; font-weight: 700; }
 .rep-day-date { font-size: 12px; color: var(--muted); }
+.rep-day-off { font-size: 11px; font-weight: 600; color: #c2710c; margin-top: 3px; }
+html[data-theme="dark"] .rep-day-off { color: #f0a83c; }
 .rep-day-total { font-size: 13px; font-weight: 600; color: var(--blue); }
 .rep-proj-line {
   display: flex; align-items: center; justify-content: space-between;
@@ -3176,12 +3178,18 @@ function renderReportsTable(reports) {
 
   let html = '';
   sortedGroups.forEach(g => {
+    // Отчёты, внесённые «задним числом» (дата внесения ≠ дата отчёта)
+    const offDates = [...new Set(g.items.filter(r => r.off_date && r.submitted_at).map(r => r.submitted_at))];
+    const offNote = offDates.length
+      ? `<div class="rep-day-off" title="Отчёт внесён не в дату, за которую он проставлен">⏱ внесён задним числом: ${offDates.map(escapeHtml).join(', ')}</div>`
+      : '';
     html += `
     <div class="rep-day-card">
       <div class="rep-day-head">
         <div>
           <div class="rep-day-name">${escapeHtml(g.username)}</div>
           <div class="rep-day-date">${fmtDate(g.date)}</div>
+          ${offNote}
         </div>
         <div class="rep-day-total">${+g.total.toFixed(2)} ч</div>
       </div>
