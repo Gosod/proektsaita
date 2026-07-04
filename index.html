@@ -1409,6 +1409,14 @@ function localISO(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
+// Ник → отображаемое ФИО (по S.allUsers). Ник остаётся техническим ключом
+// (в Sheets/users.json), в интерфейсе показываем имя. Фолбэк — сам ник.
+function empName(username) {
+  if (!username) return '?';
+  const u = (S.allUsers || []).find(x => (x.username || '').toLowerCase() === username.toLowerCase());
+  return (u && u.display_name) || username;
+}
+
 // ══════════════════════════════════════════════════════
 // ТЕМА (светлая / тёмная) — анимация заливки кругом
 // ══════════════════════════════════════════════════════
@@ -2312,7 +2320,7 @@ function renderAdminOverview() {
             ${empSorted.map(e=>`
               <div class="emp-card">
                 <div class="emp-head">
-                  <div class="emp-name">${escapeHtml(e.username||'?')}</div>
+                  <div class="emp-name">${escapeHtml(empName(e.username))}</div>
                   <div class="emp-hours">${e.hours} ч</div>
                 </div>
                 <div class="emp-meta">Отчётов: ${e.reports}</div>
@@ -2781,7 +2789,7 @@ function renderAdminReports() {
           <label class="filter-lbl">Сотрудник</label>
           <select class="filter-inp" id="filterUser">
             <option value="">Все сотрудники</option>
-            ${(S.allUsers||[]).map(u=>`<option value="${u.id}">${u.username}</option>`).join('')}
+            ${(S.allUsers||[]).map(u=>`<option value="${u.id}">${escapeHtml(u.display_name||u.username)}</option>`).join('')}
           </select>
         </div>
         <div>
@@ -2846,7 +2854,7 @@ function renderAdminManage() {
         <div class="cat-header ${isOpen?'open':''}" onclick="toggleManageEmp(${ui}, ${u.id})">
           <div class="cat-left">
             <span class="cat-icon">👤</span>
-            <span class="cat-name">${u.username}</span>
+            <span class="cat-name">${escapeHtml(u.display_name||u.username)}</span>
             <span class="cat-count">${userProjs.length}</span>
           </div>
           <span class="cat-arrow">›</span>
@@ -2990,7 +2998,8 @@ function addEmpProj(userId, ui, abbr) {
 async function saveEmpProjs(userId) {
   const assignments = S.userAssignments || {};
   const abbrs = assignments[String(userId)] || (S.allProjects||[]).map(p=>p.abbr);
-  const uname = S.allUsers?.find(u=>u.id===userId)?.username||'';
+  const _uu = S.allUsers?.find(u=>u.id===userId);
+  const uname = (_uu && (_uu.display_name || _uu.username)) || '';
   try {
     const resp = await fetch('/api/assign', {
       method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token},
@@ -3187,7 +3196,7 @@ function renderReportsTable(reports) {
     <div class="rep-day-card">
       <div class="rep-day-head">
         <div>
-          <div class="rep-day-name">${escapeHtml(g.username)}</div>
+          <div class="rep-day-name">${escapeHtml(empName(g.username))}</div>
           <div class="rep-day-date">${fmtDate(g.date)}</div>
           ${offNote}
         </div>
@@ -3216,7 +3225,7 @@ function renderReportsTable(reports) {
 
 async function delReport(id, username) {
   if (!id) { toast('Нет ID у записи', 'err'); return; }
-  showConfirm(`Удалить отчёт?\n${username}`, async () => {
+  showConfirm(`Удалить отчёт?\n${empName(username)}`, async () => {
     try {
       const resp = await fetch(`/api/report/${id}`, {
         method:'DELETE', headers:{'Content-Type':'application/json','Authorization':'Bearer '+AUTH.token}
@@ -3288,7 +3297,7 @@ function closeEdit() { const m = document.getElementById('_editModal'); if (m) m
 function openAdminCreateReport() {
   const s = document.getElementById('createForUser');
   s.innerHTML = '<option value="">— Выберите сотрудника —</option>';
-  (S.allUsers||[]).forEach(u => { s.innerHTML += `<option value="${u.id}" data-username="${escapeHtml(u.username)}">${escapeHtml(u.username)}</option>`; });
+  (S.allUsers||[]).forEach(u => { s.innerHTML += `<option value="${u.id}" data-username="${escapeHtml(u.username)}">${escapeHtml(u.display_name||u.username)}</option>`; });
   document.getElementById('createReportDate').value = localISO();
   S.adminReportProjects = []; S.adminSelectedProject = null;
   renderAdminReportList();

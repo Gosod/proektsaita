@@ -707,7 +707,9 @@ def init_data():
         resp['all_projects'] = all_projects
         # Тестовых сотрудников исключаем из обычных админских списков
         resp['all_users']    = [
-            {'id': int(uid), 'username': udata.get('username', '?')}
+            {'id': int(uid),
+             'username': udata.get('username', '?'),
+             'display_name': udata.get('display_name', udata.get('username', '?'))}
             for uid, udata in all_users.items()
             if not udata.get('is_test')
         ]
