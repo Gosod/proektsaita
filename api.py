@@ -23,6 +23,9 @@ import hashlib
 import secrets
 import hmac
 import calendar
+import threading
+import fcntl
+from contextlib import contextmanager
 
 import gspread
 import pytz
@@ -64,6 +67,22 @@ ADMIN_IDS = [int(x) for x in os.environ.get('ADMIN_IDS', '699229724,924261386').
 MSK              = pytz.timezone('Europe/Moscow')
 SHEETS_RETRY     = 3
 SHEETS_DELAY     = 2
+
+# ── КЭШ ЧТЕНИЯ ЛИСТА ──
+# Лист читается на каждый init/табель/список отчётов. Кэшируем на короткое
+# время: данные остаются практически свежими, но Google не дёргается на каждый
+# запрос (иначе пара медленных ответов занимает оба воркера gunicorn).
+SHEETS_CACHE_TTL   = int(os.environ.get('SHEETS_CACHE_TTL', 45))
+_sheets_cache      = None      # список записей последнего удачного чтения
+_sheets_cache_at   = 0.0       # time.monotonic() момента чтения
+_sheets_cache_lock = threading.Lock()
+
+# Лок для read-modify-write операций над JSON-файлами (users/vacations/...),
+# чтобы одновременные админ-действия не затирали друг друга.
+_json_lock = threading.Lock()
+
+# Ограничение часов в одной записи отчёта
+MAX_HOURS_PER_ENTRY = 24
 
 # JWT
 JWT_SECRET = os.environ.get('JWT_SECRET', 'phm-secret-change-me-in-production')
@@ -307,7 +326,7 @@ def load_json(path: str, default):
 
 
 def save_json(path: str, data) -> bool:
-    tmp = path + '.tmp'
+    tmp = f"{path}.{os.getpid()}.tmp"   # свой tmp на процесс — воркеры не мешают друг другу
     try:
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -315,7 +334,43 @@ def save_json(path: str, data) -> bool:
         return True
     except Exception as e:
         log.error(f"save_json({path}): {e}")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
         return False
+
+
+@contextmanager
+def json_file_lock(path: str):
+    """Межпроцессный лок на файл (gunicorn — несколько процессов, threading.Lock
+    их не синхронизирует). Используется для read-modify-write JSON-файлов."""
+    lock_path = path + '.lock'
+    f = open(lock_path, 'w')
+    try:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        with _json_lock:          # + сериализация потоков внутри процесса
+            yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        finally:
+            f.close()
+
+
+def update_json(path: str, default, mutate) -> bool:
+    """Атомарно: залочить → прочитать → изменить → записать.
+
+    Без этого два одновременных изменения (например, два админ-действия или
+    два отчёта тест-сотрудников) читали один и тот же снимок и второй затирал
+    правку первого.
+    """
+    with json_file_lock(path):
+        data = load_json(path, default)
+        result = mutate(data)
+        if result is not None:
+            data = result
+        return save_json(path, data)
 
 # ══════════════════════════════════════════════════════
 # GOOGLE SHEETS
@@ -349,8 +404,8 @@ def _submitted_for_sheets(submitted_at: str) -> str:
     return dt.strftime('%d.%m.%Y %H:%M:%S')
 
 
-def sheets_append(report: dict) -> bool:
-    """Добавить строку в Google Sheets с retry."""
+def _report_to_row(report: dict) -> list:
+    """Отчёт → строка листа (Дата, Время, Сотрудник, Проект, Часы, Комментарий, ID, Записано)."""
     dt_str = report.get('datetime', '')
     try:
         dt = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
@@ -360,7 +415,7 @@ def sheets_append(report: dict) -> bool:
         date_str = report.get('date', '')
         time_str = ''
 
-    row = [
+    return [
         date_str,
         time_str,
         report.get('username', ''),
@@ -371,22 +426,39 @@ def sheets_append(report: dict) -> bool:
         _submitted_for_sheets(report.get('submitted_at', '')),  # колонка H — когда реально внесён
     ]
 
+
+def sheets_append_many(reports: list) -> bool:
+    """Добавить несколько строк ОДНИМ запросом к Google (с retry).
+
+    Пакетная запись важна: отчёт на N проектов раньше делал N последовательных
+    обращений к API (и N раз ждал ретраи при сбое) — запрос висел, занимая воркер.
+    """
+    if not reports:
+        return True
+    rows = [_report_to_row(r) for r in reports]
+
     for attempt in range(1, SHEETS_RETRY + 1):
         try:
             client = _sheets_client()
             sheet  = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_REPORTS)
-            sheet.append_row(row, value_input_option='USER_ENTERED')
-            log.info(f"SHEETS_OK | attempt={attempt} | project={report.get('project')} | user={report.get('username')}")
+            sheet.append_rows(rows, value_input_option='USER_ENTERED')
+            sheets_cache_clear()
+            log.info(f"SHEETS_OK | attempt={attempt} | rows={len(rows)} | user={reports[0].get('username')}")
             return True
         except Exception as e:
-            log.warning(f"SHEETS_FAIL | attempt={attempt}/{SHEETS_RETRY} | error={e}")
+            log.warning(f"SHEETS_FAIL | attempt={attempt}/{SHEETS_RETRY} | rows={len(rows)} | error={e}")
             if attempt < SHEETS_RETRY:
                 time.sleep(SHEETS_DELAY)
     return False
 
 
-def sheets_read_all() -> list:
-    """Прочитать все строки из листа Отчёты.
+def sheets_append(report: dict) -> bool:
+    """Добавить одну строку в Google Sheets с retry."""
+    return sheets_append_many([report])
+
+
+def sheets_read_all(force: bool = False) -> list:
+    """Прочитать все строки из листа Отчёты (с кэшем на SHEETS_CACHE_TTL секунд).
 
     Возвращает список словарей по заголовкам (Дата, Время, Сотрудник, Проект,
     Часы, Комментарий) плюс служебный ключ '__row_id' — стабильный id из
@@ -395,7 +467,16 @@ def sheets_read_all() -> list:
     Используем get_all_values, а не get_all_records: все значения остаются
     строками (нужно для часов с запятой — "5,9"), а id из колонки G читается
     по позиции и не зависит от наличия заголовка для неё.
+
+    Кэш нужен, потому что лист читается на каждый /api/init, табель и список
+    отчётов: без него пара медленных ответов Google занимает оба воркера
+    gunicorn и сайт «подвисает». force=True — прочитать в обход кэша.
     """
+    global _sheets_cache, _sheets_cache_at
+    if not force:
+        with _sheets_cache_lock:
+            if _sheets_cache is not None and (time.monotonic() - _sheets_cache_at) < SHEETS_CACHE_TTL:
+                return _sheets_cache
     try:
         client  = _sheets_client()
         sheet   = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_REPORTS)
@@ -410,10 +491,27 @@ def sheets_read_all() -> list:
             rec['__submitted_at'] = row[SHEET_SUBMITTED_COL - 1].strip() if len(row) >= SHEET_SUBMITTED_COL else ''
             records.append(rec)
         log.info(f"SHEETS_READ | rows={len(records)}")
+        with _sheets_cache_lock:
+            _sheets_cache    = records
+            _sheets_cache_at = time.monotonic()
         return records
     except Exception as e:
         log.error(f"SHEETS_READ_FAIL | error={e}")
+        # Отдаём последний удачный снимок, если он есть — лучше слегка
+        # устаревшие данные, чем пустой экран при сбое Google.
+        with _sheets_cache_lock:
+            if _sheets_cache is not None:
+                log.warning("SHEETS_READ_FALLBACK | отдаём кэш после ошибки чтения")
+                return _sheets_cache
         return []
+
+
+def sheets_cache_clear() -> None:
+    """Сбросить кэш листа — после любой записи/правки/удаления строки."""
+    global _sheets_cache, _sheets_cache_at
+    with _sheets_cache_lock:
+        _sheets_cache    = None
+        _sheets_cache_at = 0.0
 
 
 def local_reports_for_user(uid_int: int, username: str) -> list:
@@ -427,9 +525,7 @@ def local_reports_for_user(uid_int: int, username: str) -> list:
 
 def append_local_report(report: dict) -> None:
     """Добавить отчёт в локальный файл (для тест-сотрудников)."""
-    records = load_json(REPORTS_LOCAL_FILE, [])
-    records.append(report)
-    save_json(REPORTS_LOCAL_FILE, records)
+    update_json(REPORTS_LOCAL_FILE, [], lambda records: records.append(report))
 
 # ══════════════════════════════════════════════════════
 # HELPERS
@@ -443,6 +539,22 @@ def is_admin(user_id) -> bool:
 
 def msk_now() -> datetime:
     return datetime.now(MSK)
+
+
+def parse_hours(raw):
+    """Часы из payload → float, либо None если значение некорректно.
+
+    Раньше float() падал на мусоре (500 у клиента) и пропускал значения >24,
+    которые потом при чтении обнулялись (`hours > 24 → 0`) — данные расходились
+    с тем, что видел сотрудник. Теперь такие записи отклоняем на входе.
+    """
+    try:
+        h = float(str(raw).replace(',', '.'))
+    except (TypeError, ValueError):
+        return None
+    if h <= 0 or h > MAX_HOURS_PER_ENTRY:
+        return None
+    return round(h, 2)
 
 
 def gen_id() -> str:
@@ -858,32 +970,35 @@ def submit_report_pwa():
             'date':     date_str,
         }), 409
 
-    errors = 0
+    submitted = msk_now().strftime('%Y-%m-%d %H:%M:%S')
     saved  = []
     for item in projects:
-        proj_cmt = item.get('comment', '').strip()
-        report = {
+        hours = parse_hours(item.get('hours', 0))
+        if hours is None:
+            return jsonify({'error': f'Некорректные часы для «{item.get("project", "?")}» '
+                                     f'(допустимо от 0 до {MAX_HOURS_PER_ENTRY})'}), 400
+        proj_cmt = str(item.get('comment', '')).strip()
+        saved.append({
             'user_id':  int(uid),
             'username': username,
             'project':  item.get('project', '?'),
-            'hours':    float(item.get('hours', 0)),
+            'hours':    hours,
             'comments': proj_cmt or general_cmt,
             'date':     dt.strftime('%Y-%m-%d'),
             'datetime': dt.strftime('%Y-%m-%d %H:%M:%S'),
-            'submitted_at': msk_now().strftime('%Y-%m-%d %H:%M:%S'),
-        }
-        # Тестовый сотрудник — сохраняем локально, не в Sheets
-        if is_test_user:
-            saved.append(report)
-            append_local_report({**report, 'user_id': int(uid)})
-            log.info(f"PWA_REPORT_TEST | uid={uid} | project={report['project']} | (локально сохранён)")
-            continue
-        ok = sheets_append(report)
-        if not ok:
-            errors += 1
-        saved.append(report)
-        log.info(f"PWA_REPORT | uid={uid} | username={username} | project={report['project']} | hours={report['hours']}")
+            'submitted_at': submitted,
+        })
 
+    # Тестовый сотрудник — сохраняем локально, не в Sheets
+    if is_test_user:
+        for report in saved:
+            append_local_report(report)
+        log.info(f"PWA_REPORT_TEST | uid={uid} | n={len(saved)} | (локально сохранены)")
+        return jsonify({'success': True, 'saved': len(saved), 'sheets_errors': 0})
+
+    ok = sheets_append_many(saved)          # одним запросом к Google
+    errors = 0 if ok else len(saved)
+    log.info(f"PWA_REPORT | uid={uid} | username={username} | n={len(saved)} | errors={errors}")
     return jsonify({'success': True, 'saved': len(saved), 'sheets_errors': errors})
 
 
@@ -934,15 +1049,15 @@ def admin_create_report():
             'date':     date_str,
         }), 409
 
-    errors = 0
-    saved  = []
+    submitted = msk_now().strftime('%Y-%m-%d %H:%M:%S')
+    saved = []
     for item in projects:
+        hours = parse_hours(item.get('hours', 0))
+        if hours is None:
+            return jsonify({'error': f'Некорректные часы для «{item.get("project", "?")}» '
+                                     f'(допустимо от 0 до {MAX_HOURS_PER_ENTRY})'}), 400
         proj_cmt = str(item.get('comment', '')).strip()
-        try:
-            hours = float(item.get('hours', 0))
-        except (ValueError, TypeError):
-            hours = 0.0
-        report = {
+        saved.append({
             'user_id':  int(target_uid),
             'username': username,
             'project':  item.get('project', '?'),
@@ -950,16 +1065,16 @@ def admin_create_report():
             'comments': proj_cmt or general_cmt,
             'date':     date_str,
             'datetime': dt.strftime('%Y-%m-%d %H:%M:%S'),
-            'submitted_at': msk_now().strftime('%Y-%m-%d %H:%M:%S'),
-        }
-        # Тестовый сотрудник — сохраняем локально, не в Sheets
-        if is_test_user:
+            'submitted_at': submitted,
+        })
+
+    # Тестовый сотрудник — сохраняем локально, не в Sheets
+    if is_test_user:
+        for report in saved:
             append_local_report(report)
-            saved.append(report)
-            continue
-        if not sheets_append(report):
-            errors += 1
-        saved.append(report)
+        errors = 0
+    else:
+        errors = 0 if sheets_append_many(saved) else len(saved)
 
     log.info(f"ADMIN_REPORT_CREATE | by={request.current_user.get('uid')} | for={target_uid} | n={len(saved)} | errors={errors}")
     return jsonify({'success': True, 'saved': len(saved), 'sheets_errors': errors})
@@ -1218,19 +1333,20 @@ def update_report(report_id):
                         date_iso = row_vals[0]
                 project = data.get('project', row_vals[3] if len(row_vals) > 3 else '')
 
-                flags = load_json(REPORT_FLAGS_FILE, {})
-                uid_flags  = flags.setdefault(str(uid), {})
-                date_flags = uid_flags.setdefault(date_iso, {})
-                if time_type:
-                    date_flags[project] = time_type
-                else:
-                    date_flags.pop(project, None)
-                    if not date_flags:
-                        uid_flags.pop(date_iso, None)
-                    if not uid_flags:
-                        flags.pop(str(uid), None)
-                save_json(REPORT_FLAGS_FILE, flags)
+                def _apply_flag(flags):
+                    uid_flags  = flags.setdefault(str(uid), {})
+                    date_flags = uid_flags.setdefault(date_iso, {})
+                    if time_type:
+                        date_flags[project] = time_type
+                    else:
+                        date_flags.pop(project, None)
+                        if not date_flags:
+                            uid_flags.pop(date_iso, None)
+                        if not uid_flags:
+                            flags.pop(str(uid), None)
+                update_json(REPORT_FLAGS_FILE, {}, _apply_flag)
 
+        sheets_cache_clear()
         log.info(f"REPORT_UPDATED | report_id={report_id} | sheet_row={sheet_row}")
         return jsonify({'success': True, 'report_id': report_id})
 
@@ -1253,6 +1369,7 @@ def delete_report(report_id):
         if sheet_row is None or sheet_row > len(values):
             return jsonify({'error': 'Row not found'}), 404
         sheet.delete_rows(sheet_row)
+        sheets_cache_clear()
         log.info(f"REPORT_DELETED | report_id={report_id} | sheet_row={sheet_row}")
         return jsonify({'success': True, 'deleted': report_id})
     except Exception as e:
