@@ -67,17 +67,16 @@ html[data-theme="dark"] {
 
 /* Плавная смена темы (ячейки табеля исключены — иначе на десктопе с большой
    таблицей анимация всех ячеек одновременно подвисает) */
-/* Переключение темы: анимируем ТОЛЬКО фон страницы (один элемент — дёшево).
-   Раньше здесь был универсальный селектор `*`, который вешал анимацию на все
-   элементы страницы: на экране с сотнями карточек браузер анимировал каждую,
-   отсюда «выцветание» и подтормаживание. Остальное меняет цвет мгновенно. */
+html.theme-transitioning *:not(.ts-table th):not(.ts-table td) {
+  transition: background-color .35s ease, color .35s ease, border-color .35s ease, fill .35s ease !important;
+}
 
 body {
   font-family:var(--font); color:var(--text);
   min-height:100vh; font-size:14px; line-height:1.5;
   -webkit-font-smoothing:antialiased;
   background: var(--bg);
-  transition: background-color .2s var(--ease), color .2s var(--ease);
+  transition: background-color .45s var(--ease), color .45s var(--ease);
   -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
 }
 /* Выделять можно только поля ввода и код-приглашение (его копирует админ) */
@@ -212,7 +211,7 @@ input,textarea,select { font-family:var(--font); }
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px; cursor: pointer; user-select: none;
   background: var(--surface-glass); border: 1px solid var(--border);
-  border-radius: var(--r);
+  border-radius: var(--r); backdrop-filter: blur(8px);
   transition: border-color .15s;
 }
 .ov-acc-head:active { border-color: var(--blue); }
@@ -224,6 +223,7 @@ input,textarea,select { font-family:var(--font); }
   display: none; padding: 14px;
   background: var(--surface-glass); border: 1px solid var(--border);
   border-top: none; border-radius: 0 0 var(--r) var(--r);
+  backdrop-filter: blur(8px);
 }
 .ov-acc-body.open { display: block; }
 
@@ -231,6 +231,7 @@ input,textarea,select { font-family:var(--font); }
 .rep-day-card {
   background: var(--surface-glass); border: 1px solid var(--border);
   border-radius: var(--r); padding: 14px; margin-bottom: 10px;
+  backdrop-filter: blur(8px);
 }
 .rep-day-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -280,7 +281,8 @@ html[data-theme="dark"] .rep-day-off { color: #f0a83c; }
 .card {
   background:var(--surface-glass); border-radius:var(--r);
   border:1px solid var(--border); box-shadow:var(--shadow);
-  overflow:hidden;
+  overflow:hidden; backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
 }
 .card+.card { margin-top:8px; }
 .card-row { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; }
@@ -294,7 +296,7 @@ html[data-theme="dark"] .rep-day-off { color: #f0a83c; }
   background:var(--surface-glass); border:1px solid var(--border);
   border-radius:var(--r); padding:18px 16px;
   box-shadow:var(--shadow); transition:border-color .15s,transform .12s;
-  user-select:none;
+  user-select:none; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
 }.tile:active { transform:scale(.97); border-color:var(--blue); background:var(--blue-lt); }
 .tile-icon { font-size:24px; margin-bottom:10px; }
 .tile-title { font-size:14px; font-weight:600; }
@@ -1438,6 +1440,8 @@ function setSidebarUser(name, isAdmin) {
 
 function toggleTheme(ev) {
   const root = document.documentElement;
+  root.classList.add('theme-transitioning');
+
   const goingDark = root.getAttribute('data-theme') !== 'dark';
   if (goingDark) root.setAttribute('data-theme', 'dark');
   else           root.removeAttribute('data-theme');
@@ -1445,6 +1449,8 @@ function toggleTheme(ev) {
   syncThemeIcon();
   if (typeof refreshChartsTheme === 'function') refreshChartsTheme();
   haptic('light');
+
+  setTimeout(() => root.classList.remove('theme-transitioning'), 400);
 }
 
 
