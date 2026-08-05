@@ -1383,6 +1383,7 @@ const S = {
   reportItems: [],
   navHistory: [],
   adminReportProjects: [], adminSelectedProject: null,
+  reportsLoaded: [], reportsOffset: 0, reportsTotal: 0, reportsHasMore: false,
   adminChart: null, projChart: null,
   editingReport: null,
   curAdminTab: 'overview',
@@ -3132,21 +3133,30 @@ async function submitEditProject(abbr) {
 }
 
 // ── REPORTS TABLE ─────────────────────────────────────
-async function loadReports() {
+// Отчёты грузим порциями: вся история — это тысячи записей, и рендер их всех
+// создавал тысячи DOM-узлов (отсюда тормоза вкладки «Отчёты»).
+const REPORTS_PAGE = 200;
+
+async function loadReports(append = false) {
   const u = document.getElementById('filterUser')?.value;
   const d = document.getElementById('filterDate')?.value;
-  let url = `/api/reports`;
-  const params = [];
+  if (!append) { S.reportsLoaded = []; S.reportsOffset = 0; }
+  const params = [`limit=${REPORTS_PAGE}`, `offset=${S.reportsOffset || 0}`];
   if (u) params.push(`user_id=${u}`);
   if (d) params.push(`date=${d}`);
-  if (params.length) url += `?${params.join('&')}`;
   try {
-    const resp = await fetch(url, {headers:{'Authorization':'Bearer '+AUTH.token}});
+    const resp = await fetch(`/api/reports?${params.join('&')}`, {headers:{'Authorization':'Bearer '+AUTH.token}});
     if (!resp.ok) throw new Error();
     const data = await resp.json();
-    renderReportsTable(data.reports || []);
+    S.reportsLoaded = (S.reportsLoaded || []).concat(data.reports || []);
+    S.reportsOffset = (S.reportsOffset || 0) + (data.reports || []).length;
+    S.reportsTotal  = data.total || 0;
+    S.reportsHasMore = !!data.has_more;
+    renderReportsTable(S.reportsLoaded);
   } catch(e) { toast('Ошибка загрузки отчётов','err'); }
 }
+
+function loadMoreReports() { loadReports(true); }
 
 function renderReportsTable(reports) {
   const w = document.getElementById('reportsWrap');
@@ -3219,7 +3229,13 @@ function renderReportsTable(reports) {
       }).join('')}
     </div>`;
   });
-  html += `<div style="text-align:center;color:var(--muted);font-size:12px;padding:12px">Дней: ${sortedGroups.length} · Записей: ${reports.length}</div>`;
+  const total = S.reportsTotal || reports.length;
+  html += `<div style="text-align:center;color:var(--muted);font-size:12px;padding:12px">
+             Дней: ${sortedGroups.length} · Показано записей: ${reports.length} из ${total}
+           </div>`;
+  if (S.reportsHasMore) {
+    html += `<button class="btn btn-soft" style="margin:0 0 12px" onclick="loadMoreReports()">Показать ещё</button>`;
+  }
   w.innerHTML = html;
 }
 

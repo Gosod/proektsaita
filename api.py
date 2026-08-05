@@ -72,10 +72,13 @@ SHEETS_DELAY     = 2
 # Лист читается на каждый init/табель/список отчётов. Кэшируем на короткое
 # время: данные остаются практически свежими, но Google не дёргается на каждый
 # запрос (иначе пара медленных ответов занимает оба воркера gunicorn).
-SHEETS_CACHE_TTL   = int(os.environ.get('SHEETS_CACHE_TTL', 45))
-_sheets_cache      = None      # список записей последнего удачного чтения
-_sheets_cache_at   = 0.0       # time.monotonic() момента чтения
-_sheets_cache_lock = threading.Lock()
+SHEETS_CACHE_TTL    = int(os.environ.get('SHEETS_CACHE_TTL', 45))
+_sheets_cache       = None     # список записей последнего удачного чтения
+_sheets_cache_at    = 0.0      # time.monotonic() момента чтения
+_sheets_cache_stamp = 0.0      # mtime файла-метки на момент чтения (см. sheets_cache_clear)
+_sheets_cache_lock  = threading.Lock()
+# Общая для всех воркеров метка «в лист что-то записали»
+SHEETS_STAMP_FILE   = os.path.join(BASE_DIR, '.sheets_stamp')
 
 # Лок для read-modify-write операций над JSON-файлами (users/vacations/...),
 # чтобы одновременные админ-действия не затирали друг друга.
@@ -83,6 +86,10 @@ _json_lock = threading.Lock()
 
 # Ограничение часов в одной записи отчёта
 MAX_HOURS_PER_ENTRY = 24
+
+# Постраничная выдача отчётов админу (вся история — это тысячи записей)
+REPORTS_PAGE_SIZE     = 200
+REPORTS_MAX_PAGE_SIZE = 1000
 
 # JWT
 JWT_SECRET = os.environ.get('JWT_SECRET', 'phm-secret-change-me-in-production')
@@ -472,10 +479,13 @@ def sheets_read_all(force: bool = False) -> list:
     отчётов: без него пара медленных ответов Google занимает оба воркера
     gunicorn и сайт «подвисает». force=True — прочитать в обход кэша.
     """
-    global _sheets_cache, _sheets_cache_at
+    global _sheets_cache, _sheets_cache_at, _sheets_cache_stamp
     if not force:
         with _sheets_cache_lock:
-            if _sheets_cache is not None and (time.monotonic() - _sheets_cache_at) < SHEETS_CACHE_TTL:
+            fresh    = (time.monotonic() - _sheets_cache_at) < SHEETS_CACHE_TTL
+            # запись в другом воркере делает наш кэш недействительным
+            no_writes = _sheets_stamp_mtime() <= _sheets_cache_stamp
+            if _sheets_cache is not None and fresh and no_writes:
                 return _sheets_cache
     try:
         client  = _sheets_client()
@@ -492,8 +502,9 @@ def sheets_read_all(force: bool = False) -> list:
             records.append(rec)
         log.info(f"SHEETS_READ | rows={len(records)}")
         with _sheets_cache_lock:
-            _sheets_cache    = records
-            _sheets_cache_at = time.monotonic()
+            _sheets_cache       = records
+            _sheets_cache_at    = time.monotonic()
+            _sheets_cache_stamp = _sheets_stamp_mtime()
         return records
     except Exception as e:
         log.error(f"SHEETS_READ_FAIL | error={e}")
@@ -507,11 +518,30 @@ def sheets_read_all(force: bool = False) -> list:
 
 
 def sheets_cache_clear() -> None:
-    """Сбросить кэш листа — после любой записи/правки/удаления строки."""
+    """Сбросить кэш листа — после любой записи/правки/удаления строки.
+
+    Сбрасываем не только свой процесс, но и остальные воркеры gunicorn: трогаем
+    общий файл-метку, а при чтении сравниваем его mtime с временем нашего кэша.
+    Без этого воркер, который не делал запись, отдавал бы устаревшие данные до
+    истечения TTL («отправил отчёт — а его не видно»).
+    """
     global _sheets_cache, _sheets_cache_at
     with _sheets_cache_lock:
         _sheets_cache    = None
         _sheets_cache_at = 0.0
+    try:
+        with open(SHEETS_STAMP_FILE, 'w') as f:
+            f.write(str(time.time()))
+    except Exception as e:
+        log.warning(f"SHEETS_STAMP_FAIL | {e}")
+
+
+def _sheets_stamp_mtime() -> float:
+    """Время последней записи в лист (общее для всех воркеров), 0.0 если метки нет."""
+    try:
+        return os.path.getmtime(SHEETS_STAMP_FILE)
+    except OSError:
+        return 0.0
 
 
 def local_reports_for_user(uid_int: int, username: str) -> list:
@@ -1263,7 +1293,26 @@ def get_reports():
         reports = [r for r in reports if r.get('date') == filter_date]
 
     reports = sorted(reports, key=lambda x: x.get('datetime', ''), reverse=True)
-    return jsonify({'reports': reports, 'total': len(reports)})
+
+    # Пагинация: раньше отдавали всю историю (сейчас это тысячи записей), и
+    # фронт строил из неё тысячи DOM-узлов — отсюда тормоза на вкладке «Отчёты».
+    total = len(reports)
+    try:
+        limit  = int(request.args.get('limit', REPORTS_PAGE_SIZE))
+        offset = int(request.args.get('offset', 0))
+    except (TypeError, ValueError):
+        limit, offset = REPORTS_PAGE_SIZE, 0
+    limit  = max(1, min(limit, REPORTS_MAX_PAGE_SIZE))
+    offset = max(0, offset)
+    page   = reports[offset:offset + limit]
+
+    return jsonify({
+        'reports':  page,
+        'total':    total,
+        'offset':   offset,
+        'limit':    limit,
+        'has_more': offset + len(page) < total,
+    })
 
 
 # ── UPDATE REPORT (редактирование строки в Sheets) ────

@@ -11,3 +11,5 @@ preview_*.png
 dark_before.png
 dark_after.png
 preview_*.png
+.sheets_stamp
+*.lock
